@@ -4,11 +4,12 @@
 { "src": "index.html", "use": "@vercel/static" },
 { "src": "styles.css", "use": "@vercel/static" },
 { "src": "script.js", "use": "@vercel/static" },
+{ "src": "server.js", "use": "@vercel/node" },
 { "src": "*.json", "use": "@vercel/static" },
-{ "src": "assets/**", "use": "@vercel/static" },
-{ "src": "package.json", "use": "@vercel/node" }
+{ "src": "assets/**", "use": "@vercel/static" }
 ],
 "rewrites": [
+{ "source": "/api/(.*)", "destination": "/server.js" },
 { "source": "/(.*)", "destination": "/index.html" }
 ]
 }
