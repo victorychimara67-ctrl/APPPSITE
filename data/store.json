@@ -7,6 +7,13 @@
       "passwordHash": "da024a52dd2ef2d0466c8989efe6d4bb:edafbbc3181b0fb508a9f95e626e2d876dfb01d242621e1d887caba5fcf0e038",
       "createdAt": "2026-05-02T16:42:32.873Z",
       "role": "admin"
+    },
+    {
+      "id": "ef7965087a78554f19e09432",
+      "name": "jj",
+      "email": "heheyaya405@gmail.com",
+      "passwordHash": "f5bec9acd82053c5e804803fe37bed8b:ac807a147c62741cba86be7b49edce547d3d9a9a6740f5b50838e274adba6b48",
+      "createdAt": "2026-05-02T19:11:21.249Z"
     }
   ],
   "sessions": [
@@ -14,6 +21,11 @@
       "id": "0071229ba323029ddd75632e016e031d46ec6b89ff6183c8",
       "userId": "ca912926c38ed3af701694b5",
       "expiresAt": 1778949752873
+    },
+    {
+      "id": "eda8cc1c74fef6e052ab3768b846b4a2e35e6499b1c1c972",
+      "userId": "ef7965087a78554f19e09432",
+      "expiresAt": 1778958681249
     }
   ],
   "orders": [
@@ -457,5 +469,26 @@
     }
   ],
   "hiddenProducts": [],
-  "discountCodes": []
+  "discountCodes": [
+    {
+      "code": "ECI-UC92-SSEA",
+      "type": "fixed",
+      "value": 20,
+      "active": true,
+      "isGiftCard": true,
+      "recipientEmail": "",
+      "message": "",
+      "createdAt": "2026-05-02T19:04:10.112Z"
+    },
+    {
+      "code": "ECI-HXYE-EBPO",
+      "type": "percent",
+      "value": 20,
+      "active": true,
+      "isGiftCard": false,
+      "recipientEmail": "heheyaya405@gmail.com",
+      "message": "u",
+      "createdAt": "2026-05-02T19:14:01.452Z"
+    }
+  ]
 }
