@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Emmanuel CI Universe | ECI</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="intro" aria-hidden="true">
+      <canvas id="particles"></canvas>
+      <div class="intro-camera">
+        <div class="door-shell">
+          <div class="portal-light"></div>
+          <div class="mini-site">
+            <div class="mini-nav"></div>
+            <div class="mini-copy"></div>
+            <div class="mini-products"></div>
+          </div>
+          <div class="door door-left"></div>
+          <div class="door door-right"></div>
+          <div class="door-frame"></div>
+        </div>
+      </div>
+    </div>
+
+    <header class="nav">
+      <a class="brand" href="#home" aria-label="Minimal Atelier home">
+        <span>ECI</span>
+        <small>UNIVERSE</small>
+      </a>
+      <nav class="nav-links" aria-label="Primary navigation">
+        <a href="#home" class="active">Home</a>
+        <a href="#shop">Shop</a>
+        <a href="#collections">Collections</a>
+        <a href="#categories">Categories</a>
+      </nav>
+      <div class="nav-actions" aria-label="Store tools">
+        <button class="icon-button" id="searchButton" aria-label="Search">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 21-4.35-4.35m2.35-5.15a7.5 7.5 0 1 1-15 0 7.5 7.5 0 0 1 15 0Z"/></svg>
+        </button>
+        <button class="icon-button" id="profileButton" aria-label="Profile">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 21a8 8 0 0 0-16 0m12-13a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z"/></svg>
+        </button>
+        <button class="icon-button admin-button hidden" id="adminButton" aria-label="Admin">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4 6v6c0 5 3.4 8 8 9 4.6-1 8-4 8-9V6l-8-3Z"/><path d="M9 12h6m-3-3v6"/></svg>
+        </button>
+        <button class="icon-button cart" id="cartButton" aria-label="Cart">
+          <span id="cartCount">0</span>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 7h15l-1.6 9H7.2L6 7Zm0 0 1-4h4m1 4V4a3 3 0 0 1 6 0v3"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <main id="home">
+      <section class="hero">
+        <div class="side-index" aria-hidden="true">
+          <span>01</span>
+          <i></i>
+          <span>02</span>
+          <i></i>
+          <span>03</span>
+        </div>
+
+        <div class="hero-copy reveal">
+          <div class="eyebrow">
+            <span>New Collection 2026</span>
+            <i></i>
+          </div>
+          <h1>WEAR THE FUTURE</h1>
+          <p>Timeless pieces. Modern silhouettes. Built for those who lead, not follow.</p>
+          <div class="hero-actions">
+            <a class="button primary" href="#shop">Shop Now <span aria-hidden="true">-></span></a>
+            <a class="button ghost" href="#collections">Explore Collection</a>
+          </div>
+          <div class="social-proof">
+            <div class="avatars" aria-hidden="true">
+              <span></span><span></span><span></span><button>+</button>
+            </div>
+            <p>Join 10K+ others<br />wearing Minimal</p>
+          </div>
+        </div>
+
+        <div class="hero-stage reveal" data-parallax>
+          <div class="halo"></div>
+          <img class="float-item hoodie" src="assets/hero-hoodie.png" alt="Floating matte black hoodie" />
+          <img class="float-item sneaker" src="assets/hero-sneaker.png" alt="Floating black sneaker" />
+          <img class="float-item tee" src="assets/hero-tee.png" alt="Floating black t-shirt" />
+          <div class="stone-platform"></div>
+        </div>
+
+        <a class="scroll-cue" href="#shop">
+          <span>Scroll<br />Down</span>
+          <i aria-hidden="true"></i>
+        </a>
+      </section>
+
+      <section class="products" id="shop">
+        <div class="section-heading reveal">
+          <h2>ECI Products</h2>
+          <div class="slider-actions" aria-label="Featured products controls">
+            <a href="#shop">View All</a>
+            <button aria-label="Previous products">&lt;</button>
+            <button aria-label="Next products">&gt;</button>
+          </div>
+        </div>
+        <div class="product-grid" id="productGrid">
+          <article class="product-card reveal" data-product-id="hoodie">
+            <img src="assets/product-hoodie.png" alt="Essential Hoodie" />
+            <div>
+              <h3>Essential Hoodie</h3>
+              <p>$89.99</p>
+            </div>
+            <button aria-label="Add Essential Hoodie to cart">+</button>
+          </article>
+          <article class="product-card reveal" data-product-id="tee">
+            <img src="assets/product-tee.png" alt="Minimal Tee" />
+            <div>
+              <h3>Minimal Tee</h3>
+              <p>$49.99</p>
+            </div>
+            <button aria-label="Add Minimal Tee to cart">+</button>
+          </article>
+          <article class="product-card reveal" data-product-id="jacket">
+            <img src="assets/product-jacket.png" alt="Puffer Jacket" />
+            <div>
+              <h3>Puffer Jacket</h3>
+              <p>$129.99</p>
+            </div>
+            <button aria-label="Add Puffer Jacket to cart">+</button>
+          </article>
+          <article class="product-card reveal" data-product-id="cap">
+            <img src="assets/product-cap.png" alt="Minimal Cap" />
+            <div>
+              <h3>Minimal Cap</h3>
+              <p>$29.99</p>
+            </div>
+            <button aria-label="Add Minimal Cap to cart">+</button>
+          </article>
+          <article class="product-card reveal" data-product-id="pants">
+            <img src="assets/product-pants.png" alt="Cargo Pants" />
+            <div>
+              <h3>Cargo Pants</h3>
+              <p>$79.99</p>
+            </div>
+            <button aria-label="Add Cargo Pants to cart">+</button>
+          </article>
+          <article class="product-card reveal" data-product-id="sneakers">
+            <img src="assets/product-sneakers.png" alt="Core Sneakers" />
+            <div>
+              <h3>Core Sneakers</h3>
+              <p>$119.99</p>
+            </div>
+            <button aria-label="Add Core Sneakers to cart">+</button>
+          </article>
+        </div>
+      </section>
+
+      <section class="collection-band reveal" id="collections">
+        <div>
+          <p class="eyebrow-text">Digital Showroom</p>
+          <h2>Architectural basics with cinematic depth.</h2>
+        </div>
+        <a class="button ghost" href="#categories">View Categories</a>
+      </section>
+
+      <section class="categories" id="categories">
+        <a class="category reveal" href="#shop"><span>Outerwear</span></a>
+        <a class="category reveal" href="#shop"><span>Footwear</span></a>
+        <a class="category reveal" href="#shop"><span>Essentials</span></a>
+      </section>
+    </main>
+
+    <div class="modal" id="authModal" aria-hidden="true">
+      <div class="modal-panel auth-panel" role="dialog" aria-modal="true" aria-labelledby="authTitle">
+        <button class="modal-close" data-close="authModal" aria-label="Close">x</button>
+        <div class="modal-kicker">Member Access</div>
+        <h2 id="authTitle">Enter the showroom</h2>
+        <div class="auth-tabs">
+          <button class="active" data-auth-tab="login">Login</button>
+          <button data-auth-tab="signup">Sign Up</button>
+        </div>
+        <form id="loginForm" class="auth-form">
+          <label>Email<input type="email" name="email" autocomplete="email" required /></label>
+          <label>Password<input type="password" name="password" autocomplete="current-password" required /></label>
+          <button class="button primary" type="submit">Login</button>
+        </form>
+        <form id="signupForm" class="auth-form hidden">
+          <label>Name<input type="text" name="name" autocomplete="name" required /></label>
+          <label>Email<input type="email" name="email" autocomplete="email" required /></label>
+          <label>Password<input type="password" name="password" autocomplete="new-password" minlength="8" required /></label>
+          <button class="button primary" type="submit">Create Account</button>
+        </form>
+        <div class="account-panel hidden" id="accountPanel">
+          <p id="accountName"></p>
+          <button class="button ghost" id="logoutButton" type="button">Logout</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal" id="cartModal" aria-hidden="true">
+      <div class="modal-panel cart-panel" role="dialog" aria-modal="true" aria-labelledby="cartTitle">
+        <button class="modal-close" data-close="cartModal" aria-label="Close">x</button>
+        <div class="modal-kicker">Private Checkout</div>
+        <h2 id="cartTitle">Your selection</h2>
+        <div id="cartItems" class="cart-items"></div>
+        <form id="checkoutForm" class="checkout-form">
+          <div class="checkout-grid">
+            <label>Full Name<input name="name" required /></label>
+            <label>Email<input name="email" type="email" required /></label>
+            <label>Address<input name="address1" required /></label>
+            <label>City<input name="city" required /></label>
+            <label>State<input name="state_code" maxlength="2" placeholder="CA" /></label>
+            <label>Country<input name="country_code" maxlength="2" value="US" required /></label>
+            <label>ZIP<input name="zip" required /></label>
+            <label>Discount Code<input name="discountCode" placeholder="ECI10" /></label>
+          </div>
+          <button class="button primary" type="submit">Place POD Order</button>
+          <p class="checkout-note">Orders are submitted as Printful drafts unless auto-confirm is enabled on the server.</p>
+        </form>
+      </div>
+    </div>
+
+    <div class="modal detail-page-modal" id="productModal" aria-hidden="true">
+      <div class="modal-panel product-detail-panel" role="dialog" aria-modal="true" aria-labelledby="detailTitle">
+        <button class="modal-close" data-close="productModal" aria-label="Close">x</button>
+        <div class="product-detail-layout">
+          <div>
+            <div class="viewer-3d" id="detailViewer">
+              <div class="viewer-object"><img id="detailMainImage" alt="" /></div>
+            </div>
+            <div class="mockup-strip" id="mockupStrip"></div>
+          </div>
+          <div class="detail-copy">
+            <div class="modal-kicker">Product Detail</div>
+            <h2 id="detailTitle"></h2>
+            <p id="detailPrice"></p>
+            <p id="detailDescription"></p>
+            <label>Variant<select id="detailVariant"></select></label>
+            <div class="detail-actions">
+              <button class="button primary" id="detailAddButton" type="button">Add To Cart</button>
+              <button class="button ghost" id="detailSpinButton" type="button">3D View</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal" id="adminModal" aria-hidden="true">
+      <div class="modal-panel admin-panel" role="dialog" aria-modal="true" aria-labelledby="adminTitle">
+        <button class="modal-close" data-close="adminModal" aria-label="Close">x</button>
+        <div class="modal-kicker">ECI Admin</div>
+        <h2 id="adminTitle">Command center</h2>
+        <div class="admin-stats" id="adminStats"></div>
+        <form class="discount-form" id="discountForm">
+          <label>Code<input name="code" placeholder="ECI10" required /></label>
+          <label>Type<select name="type"><option value="percent">Percent</option><option value="fixed">Fixed</option></select></label>
+          <label>Value<input name="value" type="number" min="1" step="0.01" required /></label>
+          <label>Gift Card<input name="isGiftCard" type="checkbox" value="true" /></label>
+          <label>Recipient Email<input name="recipientEmail" type="email" placeholder="customer@email.com" /></label>
+          <label>Message<input name="message" placeholder="A gift from ECI" /></label>
+          <button class="button ghost" id="generateCodeButton" type="button">Generate Code</button>
+          <button class="button primary" type="submit">Create Code</button>
+        </form>
+        <div class="admin-columns">
+          <section>
+            <h3>Users</h3>
+            <div id="adminUsers" class="admin-list"></div>
+          </section>
+          <section>
+            <h3>Orders</h3>
+            <div id="adminOrders" class="admin-list"></div>
+          </section>
+          <section>
+            <h3>Discounts</h3>
+            <div id="adminDiscounts" class="admin-list"></div>
+          </section>
+          <section>
+            <h3>Products</h3>
+            <div id="adminProducts" class="admin-list"></div>
+          </section>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal" id="searchModal" aria-hidden="true">
+      <div class="modal-panel search-panel" role="dialog" aria-modal="true" aria-labelledby="searchTitle">
+        <button class="modal-close" data-close="searchModal" aria-label="Close">x</button>
+        <div class="modal-kicker">Search ECI</div>
+        <h2 id="searchTitle">Find products</h2>
+        <input id="searchInput" type="search" placeholder="Search hoodie, t-shirt, backpack..." />
+        <div id="searchResults" class="search-results"></div>
+      </div>
+    </div>
+
+    <section class="gift-card-print" id="giftCardPrint" aria-hidden="true">
+      <p>Emmanuel CI Universe</p>
+      <h2 id="printGiftCode"></h2>
+      <strong id="printGiftValue"></strong>
+      <span id="printGiftMessage"></span>
+    </section>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+    <script src="script.js"></script>
+  </body>
+</html>
