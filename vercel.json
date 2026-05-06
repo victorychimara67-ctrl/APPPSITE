@@ -4,6 +4,7 @@
 { "src": "index.html", "use": "@vercel/static" },
 { "src": "styles.css", "use": "@vercel/static" },
 { "src": "script.js", "use": "@vercel/static" },
+{ "src": "script.min.js", "use": "@vercel/static" },
 { "src": "server.js", "use": "@vercel/node" },
 { "src": "*.json", "use": "@vercel/static" },
 { "src": "assets/**", "use": "@vercel/static" }

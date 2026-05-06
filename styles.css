@@ -5,6 +5,8 @@
   --panel-soft: #171717;
   --text: #f5f5f1;
   --muted: #a7a7a1;
+  --accent: #d7b46a;
+  --signal: #79d8c7;
   --line: rgba(255, 255, 255, 0.14);
   --glow: rgba(255, 255, 255, 0.2);
   --ease: cubic-bezier(0.19, 1, 0.22, 1);
@@ -65,6 +67,10 @@ a {
   display: grid;
   place-items: center;
   background: radial-gradient(circle at center, #171717 0%, #050505 55%, #000 100%);
+  transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
+  contain: layout paint style;
+  will-change: opacity, transform;
   animation: introExit 3.05s var(--ease) forwards;
 }
 
@@ -81,6 +87,9 @@ a {
   aspect-ratio: 0.72;
   perspective: 1100px;
   transform-style: preserve-3d;
+  transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
+  will-change: transform, opacity;
   animation: cameraPush 2.75s var(--ease) forwards;
 }
 
@@ -89,7 +98,7 @@ a {
   width: 100%;
   height: 100%;
   transform-style: preserve-3d;
-  filter: drop-shadow(0 42px 70px rgba(0, 0, 0, 0.9));
+  backface-visibility: hidden;
 }
 
 .door-frame {
@@ -110,6 +119,8 @@ a {
     linear-gradient(180deg, #151515, #060606 58%, #101010);
   border: 1px solid rgba(255, 255, 255, 0.1);
   box-shadow: inset 0 0 42px rgba(255, 255, 255, 0.04), 0 0 48px rgba(0, 0, 0, 0.8);
+  will-change: transform;
+  backface-visibility: hidden;
 }
 
 .door-left {
@@ -129,7 +140,8 @@ a {
   inset: 8%;
   background: radial-gradient(circle at center, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.2) 38%, transparent 72%);
   opacity: 0;
-  filter: blur(18px);
+  transform: translate3d(0, 0, 0);
+  will-change: opacity, transform;
   animation: lightSpill 2.5s 0.25s var(--ease) forwards;
 }
 
@@ -142,8 +154,21 @@ a {
     url("assets/hero-fashion.png") center / cover no-repeat,
     #090909;
   opacity: 0;
-  transform: translateZ(-70px) scale(0.72);
+  transform: translate3d(0, 0, -70px) scale(0.72);
+  will-change: opacity, transform;
+  backface-visibility: hidden;
   animation: miniReveal 2.6s 0.55s var(--ease) forwards;
+}
+
+.network-lite .intro {
+  animation: introExit 0.62s ease forwards;
+}
+
+.network-lite .intro-camera,
+.network-lite #particles,
+.network-lite .portal-light,
+.network-lite .door {
+  animation: none;
 }
 
 .mini-nav,
@@ -198,7 +223,7 @@ a {
   width: fit-content;
   display: grid;
   gap: 7px;
-  letter-spacing: 0.42em;
+  letter-spacing: 0;
   text-transform: uppercase;
 }
 
@@ -225,7 +250,7 @@ a {
   color: #f2f2ec;
   font-size: 13px;
   font-weight: 600;
-  letter-spacing: 0.14em;
+  letter-spacing: 0;
   text-transform: uppercase;
 }
 
@@ -344,7 +369,7 @@ a {
   color: var(--muted);
   font-size: 12px;
   font-weight: 600;
-  letter-spacing: 0.32em;
+  letter-spacing: 0;
   text-transform: uppercase;
 }
 
@@ -395,7 +420,7 @@ h1 {
   border-radius: 3px;
   font-size: 12px;
   font-weight: 800;
-  letter-spacing: 0.12em;
+  letter-spacing: 0;
   text-transform: uppercase;
   transition: transform 0.35s var(--ease), box-shadow 0.35s var(--ease), background 0.35s ease;
 }
@@ -403,8 +428,8 @@ h1 {
 .button.primary {
   gap: 13px;
   color: #050505;
-  background: #f3f3ee;
-  box-shadow: 0 0 28px rgba(255, 255, 255, 0.13);
+  background: linear-gradient(135deg, #f5f1e6, var(--accent));
+  box-shadow: 0 0 28px rgba(215, 180, 106, 0.18);
 }
 
 .button.ghost {
@@ -532,7 +557,7 @@ h1 {
   color: #e8e8e2;
   font-size: 12px;
   font-weight: 700;
-  letter-spacing: 0.14em;
+  letter-spacing: 0;
   line-height: 1.25;
   text-align: center;
   text-transform: uppercase;
@@ -573,7 +598,7 @@ h1 {
   gap: 22px;
   font-size: 15px;
   font-weight: 700;
-  letter-spacing: 0.22em;
+  letter-spacing: 0;
   text-transform: uppercase;
 }
 
@@ -591,7 +616,7 @@ h1 {
   color: #f2f2ed;
   font-size: 11px;
   font-weight: 800;
-  letter-spacing: 0.14em;
+  letter-spacing: 0;
   text-transform: uppercase;
 }
 
@@ -608,7 +633,7 @@ h1 {
 
 .product-grid {
   display: grid;
-  grid-template-columns: repeat(6, minmax(160px, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px;
 }
 
@@ -676,7 +701,7 @@ h1 {
   background: rgba(12, 12, 12, 0.78);
   padding: 0 10px;
   font: 700 11px Inter, Arial, sans-serif;
-  letter-spacing: 0.04em;
+  letter-spacing: 0;
 }
 
 .product-card button {
@@ -710,6 +735,22 @@ h1 {
   box-shadow: 0 0 20px rgba(255, 255, 255, 0.16);
 }
 
+.product-empty {
+  grid-column: 1 / -1;
+  min-height: 180px;
+  display: grid;
+  place-items: center;
+  padding: 28px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.035);
+  font-size: 13px;
+  font-weight: 700;
+  text-align: center;
+  text-transform: uppercase;
+}
+
 .collection-band {
   display: flex;
   align-items: center;
@@ -722,12 +763,36 @@ h1 {
     linear-gradient(180deg, #0f0f0f, #080808);
 }
 
+.about-band {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(260px, 0.85fr);
+  gap: clamp(24px, 5vw, 72px);
+  align-items: end;
+  padding: 84px clamp(24px, 7vw, 110px);
+  border-bottom: 1px solid var(--line);
+  background:
+    linear-gradient(135deg, rgba(215, 180, 106, 0.1), transparent 34%),
+    linear-gradient(180deg, #0b0b0b, #050505);
+}
+
+.about-band h2 {
+  max-width: 900px;
+  font-size: clamp(30px, 4.4vw, 62px);
+  line-height: 1.05;
+}
+
+.about-band > p {
+  color: #c9c8bf;
+  font-size: 15px;
+  line-height: 1.7;
+}
+
 .eyebrow-text {
   margin-bottom: 14px;
   color: var(--muted);
   font-size: 12px;
   font-weight: 700;
-  letter-spacing: 0.28em;
+  letter-spacing: 0;
   text-transform: uppercase;
 }
 
@@ -743,6 +808,40 @@ h1 {
   gap: 1px;
   padding: 1px;
   background: var(--line);
+}
+
+.site-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 32px clamp(24px, 6vw, 96px) 104px;
+  color: var(--muted);
+  background: #050505;
+}
+
+.site-footer div {
+  display: grid;
+  gap: 8px;
+}
+
+.site-footer strong {
+  color: var(--text);
+  font-size: 14px;
+  text-transform: uppercase;
+}
+
+.site-footer nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+}
+
+.site-footer a {
+  color: #efeee7;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
 }
 
 .category {
@@ -826,7 +925,7 @@ h1 {
   color: var(--muted);
   font-size: 11px;
   font-weight: 800;
-  letter-spacing: 0.22em;
+  letter-spacing: 0;
   text-transform: uppercase;
 }
 
@@ -857,7 +956,7 @@ h1 {
   cursor: pointer;
   font-size: 12px;
   font-weight: 800;
-  letter-spacing: 0.12em;
+  letter-spacing: 0;
   text-transform: uppercase;
 }
 
@@ -884,12 +983,13 @@ label {
   color: var(--muted);
   font-size: 11px;
   font-weight: 800;
-  letter-spacing: 0.12em;
+  letter-spacing: 0;
   text-transform: uppercase;
 }
 
 input,
-select {
+select,
+textarea {
   width: 100%;
   min-height: 46px;
   border: 1px solid rgba(255, 255, 255, 0.14);
@@ -902,9 +1002,22 @@ select {
 }
 
 input:focus,
-select:focus {
+select:focus,
+textarea:focus {
   border-color: rgba(255, 255, 255, 0.38);
   box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.06);
+}
+
+textarea {
+  min-height: 96px;
+  padding: 12px 13px;
+  resize: vertical;
+  line-height: 1.45;
+}
+
+button:disabled {
+  cursor: progress;
+  opacity: 0.64;
 }
 
 select option {
@@ -996,7 +1109,9 @@ input[type="checkbox"] {
   gap: 14px;
 }
 
-.checkout-grid label:nth-child(3) {
+.checkout-grid label:nth-child(4),
+.checkout-grid label:nth-child(9),
+.checkout-grid label:nth-child(10) {
   grid-column: 1 / -1;
 }
 
@@ -1004,6 +1119,36 @@ input[type="checkbox"] {
   color: var(--muted);
   font-size: 12px;
   line-height: 1.5;
+}
+
+.checkout-summary {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.checkout-summary:empty {
+  display: none;
+}
+
+.checkout-summary div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.checkout-summary span,
+.checkout-summary p {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.checkout-summary strong {
+  font-size: 14px;
 }
 
 .toast {
@@ -1057,6 +1202,7 @@ input[type="checkbox"] {
 }
 
 .viewer-3d {
+  position: relative;
   min-height: min(68vh, 720px);
   display: grid;
   place-items: center;
@@ -1067,6 +1213,30 @@ input[type="checkbox"] {
     radial-gradient(circle at 48% 28%, rgba(255, 255, 255, 0.18), transparent 34%),
     linear-gradient(145deg, #181818, #050505);
   overflow: hidden;
+}
+
+.gallery-arrow {
+  position: absolute;
+  top: 50%;
+  z-index: 4;
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 999px;
+  color: #fff;
+  background: rgba(8, 8, 8, 0.72);
+  cursor: pointer;
+  transform: translateY(-50%);
+}
+
+.gallery-prev {
+  left: 16px;
+}
+
+.gallery-next {
+  right: 16px;
 }
 
 .viewer-object {
@@ -1097,6 +1267,7 @@ input[type="checkbox"] {
   margin-top: 14px;
   padding-bottom: 8px;
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
   scroll-snap-type: x mandatory;
 }
 
@@ -1191,10 +1362,14 @@ input[type="checkbox"] {
   gap: 18px;
 }
 
+.admin-columns section:last-child {
+  grid-column: 1 / -1;
+}
+
 .admin-columns h3 {
   margin: 0 0 12px;
   font-size: 13px;
-  letter-spacing: 0.18em;
+  letter-spacing: 0;
   text-transform: uppercase;
 }
 
@@ -1211,6 +1386,162 @@ input[type="checkbox"] {
   gap: 8px;
   align-items: center;
   padding: 12px;
+}
+
+.admin-product-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+
+.admin-product-toolbar .button {
+  min-height: 40px;
+  white-space: nowrap;
+}
+
+.admin-product-toolbar p {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.admin-list .admin-product-editor {
+  display: block;
+  padding: 0;
+  overflow: hidden;
+}
+
+.admin-product-form {
+  display: grid;
+  grid-template-columns: 140px repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  padding: 12px;
+}
+
+.admin-product-preview {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}
+
+.admin-product-preview img {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 6px;
+  object-fit: cover;
+  background: #0d0d0d;
+}
+
+.admin-product-preview span {
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.admin-product-form label:nth-of-type(4),
+.admin-product-form label:nth-of-type(5),
+.admin-product-form label:nth-of-type(6) {
+  grid-column: span 3;
+}
+
+.admin-product-form label:nth-of-type(7),
+.admin-product-controls {
+  grid-column: 2 / -1;
+}
+
+.admin-upload-field,
+.file-name-details {
+  grid-column: 2 / -1;
+}
+
+.admin-upload-field {
+  display: grid;
+  gap: 10px;
+}
+
+.admin-upload-field > span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.file-pick {
+  width: fit-content;
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 16px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.06);
+  cursor: pointer;
+}
+
+.file-input {
+  position: absolute;
+  width: 1px;
+  min-height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.admin-upload-previews {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(82px, 1fr));
+  gap: 10px;
+}
+
+.admin-upload-previews figure {
+  margin: 0;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 7px;
+  background: #101010;
+}
+
+.admin-upload-previews img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.admin-upload-previews p,
+.mockup-status {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.file-name-details {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.file-name-details summary {
+  width: fit-content;
+  cursor: pointer;
+  color: #f2f2ed;
+  font-weight: 800;
+}
+
+.file-name-details ul {
+  display: grid;
+  gap: 5px;
+  margin: 10px 0 0;
+  padding-left: 18px;
+  overflow-wrap: anywhere;
+}
+
+.admin-product-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
 }
 
 .admin-list strong,
@@ -1292,7 +1623,7 @@ input[type="checkbox"] {
 
   .gift-card-print p {
     color: #111;
-    letter-spacing: 0.22em;
+    letter-spacing: 0;
     text-transform: uppercase;
   }
 
@@ -1351,13 +1682,13 @@ input[type="checkbox"] {
 
 @keyframes cameraPush {
   0% {
-    transform: translateZ(0) scale(0.9);
+    transform: translate3d(0, 0, 0) scale(0.9);
   }
   72% {
-    transform: translateZ(140px) scale(1);
+    transform: translate3d(0, 0, 140px) scale(1);
   }
   100% {
-    transform: translateZ(680px) scale(2.6);
+    transform: translate3d(0, 0, 680px) scale(2.6);
   }
 }
 
@@ -1390,14 +1721,14 @@ input[type="checkbox"] {
 @keyframes miniReveal {
   0% {
     opacity: 0;
-    transform: translateZ(-120px) scale(0.45);
+    transform: translate3d(0, 0, -120px) scale(0.45);
   }
   55% {
     opacity: 1;
   }
   100% {
     opacity: 1;
-    transform: translateZ(150px) scale(1.25);
+    transform: translate3d(0, 0, 150px) scale(1.25);
   }
 }
 
@@ -1539,15 +1870,38 @@ input[type="checkbox"] {
   .product-detail-layout,
   .admin-columns,
   .admin-stats,
-  .discount-form {
+  .discount-form,
+  .about-band {
     grid-template-columns: 1fr;
+  }
+
+  .admin-product-toolbar,
+  .site-footer {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .admin-product-form {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-product-form label:nth-of-type(4),
+  .admin-product-form label:nth-of-type(5),
+  .admin-product-form label:nth-of-type(6),
+  .admin-product-form label:nth-of-type(7),
+  .admin-upload-field,
+  .file-name-details,
+  .admin-product-controls {
+    grid-column: auto;
   }
 
   .viewer-3d {
     min-height: 360px;
   }
 
-  .checkout-grid label:nth-child(3) {
+  .checkout-grid label:nth-child(4),
+  .checkout-grid label:nth-child(9),
+  .checkout-grid label:nth-child(10) {
     grid-column: auto;
   }
 
@@ -1569,7 +1923,7 @@ input[type="checkbox"] {
 
   .eyebrow {
     font-size: 10px;
-    letter-spacing: 0.2em;
+    letter-spacing: 0;
   }
 
   .eyebrow i,
@@ -1599,5 +1953,16 @@ input[type="checkbox"] {
 
   .product-card img {
     min-height: 310px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
   }
 }
