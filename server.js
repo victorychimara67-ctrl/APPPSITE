@@ -182,10 +182,29 @@ function hashPassword(password, salt = randomBytes(16).toString("hex")) {
 
 function verifyPassword(password, stored) {
   const [salt, hash] = stored.split(":");
-  if (!salt || !hash) return false;
+  if (!salt || !hash) {
+    console.warn("Password verification failed: invalid hash format", { salt: Boolean(salt), hash: Boolean(hash) });
+    return false;
+  }
   const candidate = hashPassword(password, salt).split(":")[1];
-  if (hash.length !== candidate.length) return false;
-  return timingSafeEqual(Buffer.from(hash, "hex"), Buffer.from(candidate, "hex"));
+  if (!candidate) {
+    console.warn("Password verification failed: candidate hash generation failed");
+    return false;
+  }
+  if (hash.length !== candidate.length) {
+    console.warn("Password verification failed: hash length mismatch", { expected: hash.length, got: candidate.length });
+    return false;
+  }
+  try {
+    const result = timingSafeEqual(Buffer.from(hash, "hex"), Buffer.from(candidate, "hex"));
+    if (!result) {
+      console.warn("Password verification failed: hashes don't match");
+    }
+    return result;
+  } catch (error) {
+    console.error("Password verification error:", error.message);
+    return false;
+  }
 }
 
 function toBase64Url(value) {
@@ -655,9 +674,18 @@ async function routeApi(req, res, pathname) {
       const password = String(body.password || "");
       const db = readDb();
       const user = db.users.find((item) => item.email === email);
-      if (!user || !verifyPassword(password, user.passwordHash)) {
+      
+      if (!user) {
+        console.warn("Login failed: user not found", { email, attemptedEmail: body.email });
         return json(res, 401, { error: "Email or password is incorrect." });
       }
+      
+      const passwordValid = verifyPassword(password, user.passwordHash);
+      if (!passwordValid) {
+        console.warn("Login failed: password incorrect for user", { email, passwordProvided: Boolean(password) });
+        return json(res, 401, { error: "Email or password is incorrect." });
+      }
+      
       return json(res, 200, { user: publicUser(user) }, { "Set-Cookie": makeCookie(user) });
     }
 
