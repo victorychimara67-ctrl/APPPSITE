@@ -453,12 +453,25 @@ function normalizeImageItems(raw = []) {
 }
 
 function imageDisplayName(url = "") {
-  if (url.startsWith("data:")) return "Uploaded custom image";
-  try {
-    return decodeURIComponent(new URL(url).pathname.split("/").filter(Boolean).pop() || "Custom image");
-  } catch {
-    return String(url).split("/").pop() || "Custom image";
+  if (!url) return "Custom image";
+
+  if (url.startsWith("data:")) {
+    return "Uploaded custom image";
   }
+
+  // ✅ Only parse as URL if it's actually a full URL
+  if (url.startsWith("http://") || url.startsWith("https://")) {
+    try {
+      return decodeURIComponent(
+        new URL(url).pathname.split("/").filter(Boolean).pop()
+      ) || "Custom image";
+    } catch {
+      return "Custom image";
+    }
+  }
+
+  // ✅ Handle normal strings safely (like filenames, zip codes, etc.)
+  return url.split("/").pop() || "Custom image";
 }
 
 function normalizeMockup3d(raw = null) {

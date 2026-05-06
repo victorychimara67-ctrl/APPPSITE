@@ -529,8 +529,8 @@ logoutButton.addEventListener("click", async () => {
   updateAuthUi();
   showToast("Logged out");
 });
-
-checkoutForm.addEventListener("submit", async (event) => {
+checkoutForm.addEventListener
+("submit", async (event) => {
   event.preventDefault();
   if (!checkoutForm.reportValidity()) return;
   if (!currentUser) {
