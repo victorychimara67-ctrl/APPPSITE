@@ -522,8 +522,98 @@ async function routeApi(req, res, pathname) {
         stripeConfigured: Boolean(STRIPE_SECRET_KEY),
         stripePublishableConfigured: Boolean(STRIPE_PUBLISHABLE_KEY),
         stripeWebhookConfigured: Boolean(STRIPE_WEBHOOK_SECRET),
-        fileDbWrites: FILE_DB_WRITES
+        fileDbWrites: FILE_DB_WRITES,
+        siteUrl: SITE_URL
       });
+    }
+
+    if (req.method === "GET" && pathname === "/api/stripe/test") {
+      try {
+        const stripe = Stripe(STRIPE_SECRET_KEY);
+        const session = await stripe.checkout.sessions.create({
+          mode: "payment",
+          customer_email: "test@example.com",
+          line_items: [
+            {
+              price_data: {
+                currency: "usd",
+                product_data: {
+                  name: "Test Product"
+                },
+                unit_amount: 1000
+              },
+              quantity: 1
+            }
+          ],
+          success_url: `${SITE_URL || getRequestOrigin(req)}/?test=success`,
+          cancel_url: `${SITE_URL || getRequestOrigin(req)}/?test=cancel`
+        });
+        return json(res, 200, {
+          success: true,
+          sessionId: session.id,
+          url: session.url,
+          hasUrl: Boolean(session.url),
+          sessionKeys: Object.keys(session)
+        });
+      } catch (error) {
+        return json(res, 400, {
+          success: false,
+          error: error.message,
+          stack: error.stack
+        });
+      }
+    }
+
+    if (req.method === "POST" && pathname === "/api/stripe/test-checkout") {
+      try {
+        const active = requireUser(req, res);
+        if (!active) return;
+        
+        const body = await parseBody(req);
+        const testOrder = {
+          id: randomBytes(12).toString("hex"),
+          userId: active.user.id,
+          recipient: {
+            name: "Test User",
+            email: "test@example.com",
+            address1: "123 Test St",
+            city: "Test City",
+            country_code: "US",
+            zip: "12345"
+          },
+          items: [
+            { productId: "test", name: "Test Item", price: 29.99, quantity: 1, currency: "USD" }
+          ],
+          discount: { subtotal: 29.99, discountAmount: 0, total: 29.99, currency: "USD" },
+          customOrder: {},
+          total: 29.99,
+          currency: "USD",
+          status: "pending_payment",
+          createdAt: new Date().toISOString()
+        };
+        
+        const session = await createStripeCheckoutSession(req, testOrder);
+        return json(res, 200, {
+          success: true,
+          testOrder,
+          session: {
+            id: session.id,
+            url: session.url,
+            hasUrl: Boolean(session.url),
+            paymentStatus: session.payment_status
+          }
+        });
+      } catch (error) {
+        return json(res, 400, {
+          success: false,
+          error: error.message,
+          errorDetails: {
+            name: error.name,
+            code: error.code,
+            type: error.type
+          }
+        });
+      }
     }
 
     if (req.method === "POST" && pathname === "/api/stripe/webhook") {
@@ -608,6 +698,9 @@ async function routeApi(req, res, pathname) {
         return json(res, 400, { error: "Complete the custom order form and add at least one cart item." });
       }
       const discount = applyDiscount(items, String(body.discountCode || "").trim(), active.db);
+      if (discount.total <= 0) {
+        return json(res, 400, { error: "Cart total must be greater than 0. Please ensure all items have valid pricing." });
+      }
       const customOrder = normalizeCustomOrder(body.customOrder);
       const localOrder = createLocalOrder({ user: active.user, recipient, items, discount, customOrder });
       const session = await createStripeCheckoutSession(req, localOrder);
@@ -805,7 +898,7 @@ async function createStripeCheckoutSession(req, order) {
     throw new Error("Stripe secret key is not configured on the server.");
   }
 
-  const stripe = new Stripe(STRIPE_SECRET_KEY);
+  const stripe = Stripe(STRIPE_SECRET_KEY);
 
   const amount = stripeAmount(order.total);
   if (amount <= 0) {
@@ -813,31 +906,45 @@ async function createStripeCheckoutSession(req, order) {
   }
 
   const origin = SITE_URL || getRequestOrigin(req);
+  if (!origin) {
+    throw new Error("Could not determine site URL for Stripe checkout redirect.");
+  }
 
-  const session = await stripe.checkout.sessions.create({
-    mode: "payment",
-    customer_email: order.recipient.email,
-    client_reference_id: order.id,
+  try {
+    const session = await stripe.checkout.sessions.create({
+      mode: "payment",
+      customer_email: order.recipient.email,
+      client_reference_id: order.id,
+      metadata: orderMetadata(order),
 
-    line_items: [
-      {
-        price_data: {
-          currency: order.currency.toLowerCase(),
-          product_data: {
-            name: "ECI Custom Order",
-            description: `${order.items.length} item(s)`
+      line_items: [
+        {
+          price_data: {
+            currency: order.currency.toLowerCase(),
+            product_data: {
+              name: "ECI Custom Order",
+              description: `${order.items.length} item(s)`
+            },
+            unit_amount: amount
           },
-          unit_amount: amount
-        },
-        quantity: 1
-      }
-    ],
+          quantity: 1
+        }
+      ],
 
-    success_url: `${origin}/?payment=success&order=${order.id}`,
-    cancel_url: `${origin}/?payment=cancelled&order=${order.id}#cart`
-  });
+      success_url: `${origin}/?payment=success&order=${order.id}`,
+      cancel_url: `${origin}/?payment=cancelled&order=${order.id}#cart`
+    });
 
-  return session;
+    if (!session.url) {
+      console.error("Stripe session created but missing URL", { sessionId: session.id, session });
+      throw new Error("Stripe session was created but checkout URL is missing.");
+    }
+
+    return session;
+  } catch (error) {
+    console.error("Stripe checkout creation failed", { error: error.message, orderTotal: order.total, origin });
+    throw error;
+  }
 }
 
 function verifyStripeSignature(rawBody, signatureHeader) {

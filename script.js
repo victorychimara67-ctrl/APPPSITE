@@ -543,6 +543,14 @@ checkoutForm.addEventListener
     showToast("Your cart is empty");
     return;
   }
+  
+  // Check for items with null/0 prices
+  const invalidItems = cart.filter(item => !item.price || item.price <= 0);
+  if (invalidItems.length > 0) {
+    showToast("Some items in your cart don't have pricing. Please remove them or refresh the page.");
+    return;
+  }
+  
   try {
     const submitButton = checkoutForm.querySelector('button[type="submit"]');
     if (submitButton) {
@@ -566,10 +574,20 @@ checkoutForm.addEventListener
         }
       })
     });
+    
+    if (!payload.checkoutUrl) {
+      throw new Error("Stripe checkout URL was not generated. Please try again.");
+    }
+    
+    if (!payload.checkoutUrl.startsWith("https://")) {
+      throw new Error(`Invalid checkout URL received: ${payload.checkoutUrl}`);
+    }
+    
     showToast("Redirecting to Stripe secure payment");
     window.location.href = payload.checkoutUrl;
   } catch (error) {
-    showToast(error.message);
+    console.error("Checkout error:", error, { payload });
+    showToast(error.message || "Checkout failed. Please try again.");
   } finally {
     const submitButton = checkoutForm.querySelector('button[type="submit"]');
     if (submitButton) {
