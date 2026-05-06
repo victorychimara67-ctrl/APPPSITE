@@ -960,7 +960,7 @@ async function createStripeCheckoutSession(req, order) {
       ],
 
       success_url: `${origin}/?payment=success&order=${order.id}`,
-      cancel_url: `${origin}/?payment=cancelled&order=${order.id}#cart`
+      cancel_url: `${origin}/?payment=cancelled&order=${order.id}`
     });
 
     if (!session.url) {

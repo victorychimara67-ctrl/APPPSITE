@@ -870,6 +870,7 @@ function handlePaymentReturn() {
   }
   if (payment === "cancelled") {
     showToast("Payment cancelled. Your cart is still saved.");
+    if (cartModal) openModal(cartModal);
   }
   history.replaceState({}, "", `${location.pathname}${location.hash || ""}`);
 }
