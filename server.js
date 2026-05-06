@@ -3,6 +3,7 @@ import { createReadStream, existsSync, mkdirSync, readFileSync, writeFileSync } 
 import { extname, join, normalize, resolve } from "node:path";
 import { createServer } from "node:http";
 import { URL } from "node:url";
+import Stripe from "stripe";
 
 const root = process.cwd();
 const dataDir = join(root, "data");
@@ -334,18 +335,19 @@ async function getProducts() {
     };
     return { source: "printful", connected: true, products: applyProductOverrides(productCache.products, db).filter((product) => !hidden.has(product.id)) };
   } catch (error) {
+    console.warn(`Printful API error: ${error.message}`);
     productCache = {
       expiresAt: Date.now() + 1000 * 60,
-      products: [],
-      source: "printful_error",
+      products: applyProductOverrides(localProducts, db).filter((product) => !hidden.has(product.id)),
+      source: "local_fallback",
       connected: false,
-      warning: `Printful unavailable: ${error.message}`
+      warning: `Printful temporarily unavailable, showing local products: ${error.message}`
     };
     return {
       source: productCache.source,
       connected: productCache.connected,
       warning: productCache.warning,
-      products: []
+      products: productCache.products
     };
   }
 }
@@ -796,7 +798,7 @@ function orderFromMetadata(metadata = {}) {
   }
 }
 
-const Stripe = require("stripe");
+
 
 async function createStripeCheckoutSession(req, order) {
   if (!STRIPE_SECRET_KEY) {
@@ -836,21 +838,6 @@ async function createStripeCheckoutSession(req, order) {
   });
 
   return session;
-}
-
-  const response = await fetch("https://api.stripe.com/v1/checkout/sessions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${STRIPE_SECRET_KEY}`,
-      "Content-Type": "application/x-www-form-urlencoded"
-    },
-    body: form
-  });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error(payload?.error?.message || `Stripe Checkout failed with ${response.status}`);
-  }
-  return payload;
 }
 
 function verifyStripeSignature(rawBody, signatureHeader) {
