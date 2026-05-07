@@ -116,6 +116,7 @@ function writeDb(db, options = {}) {
   try {
     if (!existsSync(dataDir)) mkdirSync(dataDir, { recursive: true });
     writeFileSync(dbPath, JSON.stringify(memoryDb, null, 2));
+    console.log(`Database persisted to ${dbPath} (${memoryDb.users.length} users, ${memoryDb.orders.length} orders)`);
     return true;
   } catch (error) {
     console.warn(`Could not persist ${dbPath}; continuing in memory. ${error.message}`);
@@ -711,7 +712,7 @@ async function routeApi(req, res, pathname) {
         ...(ADMIN_EMAILS.has(email) ? { role: "admin" } : {})
       };
       db.users.push(user);
-      writeDb(db, { persist: false });
+      writeDb(db);
       return json(res, 201, { user: publicUser(user) }, { "Set-Cookie": makeCookie(user) });
     }
 
