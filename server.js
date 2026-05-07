@@ -1127,12 +1127,30 @@ async function submitOrderToPrintful(order) {
   // Back to Manual Draft Mode: change to true if you want auto-production
   const shouldConfirm = process.env.PRINTFUL_AUTO_CONFIRM === "true" || false; 
   const query = shouldConfirm ? "?confirm=1" : "?confirm=0";
-  const printfulItems = order.items.map((item) => {
-    const product = localProducts.find((candidate) => candidate.id === item.productId);
-    const syncVariantId = item.printfulVariantId || product?.printfulVariantId;
-    if (!syncVariantId) throw new Error(`Missing Printful sync variant ID for ${item.name || item.productId}.`);
+  const printfulItems = await Promise.all(order.items.map(async (item) => {
+    // 1. Try ID from the order item itself
+    let syncVariantId = item.printfulVariantId;
+    
+    // 2. Try to find in local products or environment variables
+    if (!syncVariantId) {
+      const product = localProducts.find((p) => p.id === item.productId || p.name === item.name);
+      syncVariantId = product?.printfulVariantId || process.env[`PRINTFUL_VARIANT_${item.productId}`];
+    }
+    
+    // 3. NUCLEAR OPTION: If still missing, try to find a match in the recently synced products
+    if (!syncVariantId) {
+      const synced = await getProducts();
+      const match = synced.products.find(p => p.name.includes(item.name) || item.name.includes(p.name));
+      syncVariantId = match?.printfulVariantId || match?.variants?.[0]?.id;
+    }
+
+    if (!syncVariantId) {
+      throw new Error(`Variant ID missing for "${item.name}". Please sync Printful products in the Admin Panel.`);
+    }
+    
     return { sync_variant_id: Number(syncVariantId), quantity: item.quantity };
-  });
+  }));
+
   const payload = await printful(`/orders${query}`, {
     method: "POST",
     body: JSON.stringify({
