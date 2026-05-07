@@ -770,7 +770,15 @@ async function loadAdmin() {
 
     const adminAnalytics = document.getElementById("adminAnalytics");
     if (adminAnalytics) {
+      const diag = await api("/api/admin/diagnostics");
       adminAnalytics.innerHTML = `
+        <div class="launch-status ${diag.ready ? "ready" : "not-ready"}">
+          ${diag.ready ? "<strong>✓ LAUNCH READY</strong>" : "<strong>✗ CONNECTION REQUIRED</strong>"}
+          <div class="diag-details">
+            <span class="${diag.stripe.ok ? "ok" : "err"}">Stripe: ${diag.stripe.message}</span>
+            <span class="${diag.printful.ok ? "ok" : "err"}">Printful: ${diag.printful.message} ${diag.printful.storeName ? `(${diag.printful.storeName})` : ""}</span>
+          </div>
+        </div>
         <div class="live-badge"><strong>${payload.analytics.liveUsers}</strong> Live Browsing</div>
         <p>Total Site Visits: <strong>${payload.analytics.totalVisits}</strong></p>
       `;

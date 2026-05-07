@@ -2438,3 +2438,34 @@ input[type="checkbox"] {
 .scanner-aim { position: absolute; inset: 50px; border: 2px solid var(--accent); box-shadow: 0 0 0 1000px rgba(0,0,0,0.5); pointer-events: none; }
 .scanner-aim::after { content: \\; position: absolute; top: 0; left: 0; width: 100%; height: 2px; background: var(--accent); animation: scanMove 2s infinite; }
 @keyframes scanMove { from { top: 0; } to { top: 100%; } }
+
+/* Launch Diagnostics */
+.launch-status {
+  padding: 1.5rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  margin-bottom: 1.5rem;
+  transition: all 0.3s ease;
+}
+.launch-status.ready {
+  border-color: #00ff88;
+  background: rgba(0, 255, 136, 0.05);
+}
+.launch-status strong {
+  display: block;
+  font-size: 1.1rem;
+  margin-bottom: 0.8rem;
+  letter-spacing: 1px;
+}
+.launch-status.ready strong { color: #00ff88; }
+.launch-status.not-ready strong { color: #ff4d4d; }
+.diag-details {
+  display: flex;
+  gap: 1.5rem;
+  font-size: 0.85rem;
+  opacity: 0.9;
+}
+.diag-details span::before { content: "● "; }
+.diag-details span.ok { color: #00ff88; }
+.diag-details span.err { color: #ff4d4d; }

@@ -1138,13 +1138,29 @@ async function submitOrderToPrintful(order) {
       syncVariantId = product?.printfulVariantId || process.env[`PRINTFUL_VARIANT_${item.productId}`] || process.env[`PRINTFUL_VARIANT_${item.id}`];
     }
     
-    // 3. FUZZY SEARCH: If still missing, look through the actual Printful Sync products
+    // 3. SUPER-AGGRESSIVE SEARCH: If still missing, look through synced products with fallback logic
     if (!syncVariantId) {
-      console.log(`Searching Printful for missing ID: ${item.name}`);
+      console.log(`Aggressive Search in Printful for: ${item.name}`);
       const synced = await getProducts();
-      // Try exact name match, then partial name match
-      const match = synced.products.find(p => p.name === item.name) || 
-                    synced.products.find(p => p.name.toLowerCase().includes(item.name.toLowerCase()) || item.name.toLowerCase().includes(p.name.toLowerCase()));
+      
+      // Stage A: Exact name match
+      let match = synced.products.find(p => p.name === item.name);
+      
+      // Stage B: Fuzzy name match (case insensitive)
+      if (!match) {
+        match = synced.products.find(p => p.name.toLowerCase().includes(item.name.toLowerCase()) || 
+                                         item.name.toLowerCase().includes(p.name.toLowerCase()));
+      }
+      
+      // Stage C: Keyword match (e.g., find ANY hoodie if name is 'ECI Hoodie')
+      if (!match) {
+        const keywords = item.name.toLowerCase().split(" ");
+        match = synced.products.find(p => {
+          const pName = p.name.toLowerCase();
+          return keywords.some(k => k.length > 3 && pName.includes(k));
+        });
+      }
+
       syncVariantId = match?.printfulVariantId || match?.variants?.[0]?.id;
     }
 
@@ -1363,6 +1379,42 @@ async function routeAdmin(req, res, pathname) {
     };
     writeDb(db);
     return json(res, 200, { popupConfig: db.popupConfig });
+  }
+
+  if (req.method === "GET" && pathname === "/api/admin/diagnostics") {
+    const status = {
+      stripe: { ok: false, message: "Not configured" },
+      printful: { ok: false, message: "Not configured", storeName: "" },
+      database: { ok: true, orders: db.orders.length, users: db.users.length },
+      ready: false
+    };
+
+    if (STRIPE_SECRET_KEY) {
+      try {
+        const stripe = Stripe(STRIPE_SECRET_KEY);
+        await stripe.balance.retrieve(); // Quick ping
+        status.stripe = { ok: true, message: "Connected & Ready" };
+      } catch (e) {
+        status.stripe = { ok: false, message: e.message };
+      }
+    }
+
+    if (PRINTFUL_TOKEN) {
+      try {
+        const response = await printful("/stores");
+        const store = response.result?.[0];
+        if (store) {
+          status.printful = { ok: true, message: "Connected", storeName: store.name };
+        } else {
+          status.printful = { ok: false, message: "Token valid, but no store found" };
+        }
+      } catch (e) {
+        status.printful = { ok: false, message: e.message };
+      }
+    }
+
+    status.ready = status.stripe.ok && status.printful.ok;
+    return json(res, 200, status);
   }
 
   if (req.method === "POST" && pathname.startsWith("/api/admin/orders/") && pathname.endsWith("/push-printful")) {
