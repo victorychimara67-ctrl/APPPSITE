@@ -1153,19 +1153,33 @@ async function handlePaymentReturn() {
   
   if (!payment) return;
   
+  const processingModal = document.getElementById("processingModal");
+
   if (payment === "success") {
     cart = [];
     persistCart();
-    showToast("Payment confirmed! Your ECI order is now in preparation.");
     
-    // 1. Refresh session to ensure we are logged in
+    // 1. Show processing screen
+    if (processingModal) openModal(processingModal);
+    
+    // 2. Poll for order status or just wait a bit for the webhook to finish
+    // We'll wait 3.5 seconds to give the server time to process the webhook
+    await new Promise(r => setTimeout(r, 3500));
+    
+    // 3. Refresh session and orders
     await loadSession();
     
-    // 2. If logged in, open the profile/orders modal automatically
+    // 4. Hide processing screen
+    if (processingModal) closeModal(processingModal);
+    
+    // 5. Open orders modal automatically
     if (currentUser) {
       openModal(authModal);
-      // If we have a specific order ID, we could highlight it, but showing the list is enough
-      renderUserOrders(currentUser.orders || []);
+      // Re-fetch orders to make sure we have the latest
+      await loadUserOrders();
+      showToast("Order confirmed! View status below.");
+    } else {
+      showToast("Payment received. Log in to view your order status.");
     }
   }
   

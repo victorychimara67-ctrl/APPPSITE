@@ -800,9 +800,19 @@ async function routeApi(req, res, pathname) {
       const active = requireUser(req, res);
       if (!active) return;
       
-      // Sync recent orders for the user
-      const userOrders = active.db.orders.filter((order) => order.userId === active.user.id);
-      await Promise.all(userOrders.slice(-5).map(order => syncOrderWithPrintful(order)));
+      const userEmail = String(active.user.email || "").toLowerCase();
+
+      // Match by userId OR by recipient email (for metadata reconstruction cases)
+      const userOrders = active.db.orders.filter((order) => {
+        return order.userId === active.user.id || 
+               String(order.recipient?.email || "").toLowerCase() === userEmail;
+      });
+
+      // Sync and map
+      await Promise.all(userOrders.slice(-5).map(order => {
+        if (order.printfulOrder?.id) return syncOrderWithPrintful(order);
+        return Promise.resolve();
+      }));
       
       const orders = userOrders.slice().reverse().map(order => ({
         ...order,
