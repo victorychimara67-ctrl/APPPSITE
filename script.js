@@ -1114,6 +1114,8 @@ function handlePaymentReturn() {
     cart = [];
     persistCart();
     showToast("Payment received. Your ECI order is being prepared.");
+    // Force refresh the session and orders immediately
+    loadSession();
   }
   if (payment === "cancelled") {
     showToast("Payment cancelled. Your cart is still saved.");

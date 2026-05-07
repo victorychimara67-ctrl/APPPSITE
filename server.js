@@ -1190,13 +1190,20 @@ async function handleStripeEvent(event) {
   const session = event.data?.object || {};
   const db = readDb();
   let order = db.orders.find((item) => item.id === session.client_reference_id || item.stripe?.sessionId === session.id);
+  
   if (!order) {
     order = orderFromMetadata(session.metadata);
-    if (!order) throw new Error("Could not reconstruct Stripe order metadata.");
+    if (!order) {
+      console.error("WEBHOOK ERROR: Could not reconstruct order from metadata", session.id);
+      return;
+    }
     db.orders.push(order);
   }
+
+  // CRITICAL: Update and write to DB IMMEDIATELY before doing anything else
   order.status = "paid";
   order.stripe = {
+    ...order.stripe,
     sessionId: session.id,
     paymentIntent: session.payment_intent || "",
     paymentStatus: session.payment_status || "paid",
@@ -1204,8 +1211,17 @@ async function handleStripeEvent(event) {
     currency: String(session.currency || order.currency || "USD").toUpperCase(),
     paidAt: new Date().toISOString()
   };
-  await submitOrderToPrintful(order);
   writeDb(db);
+  console.log("Order saved as PAID via webhook:", order.id);
+
+  // AUTOMATIC SYNC: Push to Printful as Draft immediately
+  try {
+    await submitOrderToPrintful(order);
+    writeDb(db); // Save Printful ID/Info
+    console.log("SUCCESS: Order pushed to Printful automatically:", order.id);
+  } catch (error) {
+    console.error("PRINTFUL AUTO-PUSH FAILED (Retry manually in Admin):", error.message);
+  }
 }
 
 async function routeAdmin(req, res, pathname) {
