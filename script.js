@@ -334,29 +334,29 @@ function renderUserOrders(orders) {
   }
   userOrdersList.innerHTML = orders.map(order => `
     <div class="user-order-card">
-      <div class="user-order-header">
-        <strong>Order #${order.id.slice(-6).toUpperCase()}</strong>
-        <span class="user-order-status status-${order.status}">${order.statusLabel || order.status.replace(/_/g, " ")}</span>
+      <div class="order-header">
+        <span class="order-id">Order #${order.id.slice(-6).toUpperCase()}</span>
+        <span class="order-status ${order.status}">${order.statusLabel || order.status.replace(/_/g, " ")}</span>
       </div>
-      <div class="user-order-details">
-        <div class="user-order-items">
-          ${order.items.map(item => `
-            <div class="order-item-mini">
-              <span>${item.quantity}x ${escapeHtml(item.name)}</span>
-              <span>${money(item.price * item.quantity, order.currency)}</span>
-            </div>
-          `).join("")}
-        </div>
-        <div class="order-footer-mini">
-          <strong>Total: ${money(order.total, order.currency)}</strong>
-          <small>${new Date(order.createdAt).toLocaleDateString()}</small>
-        </div>
-        ${order.tracking ? `
-          <a href="${order.tracking.url}" target="_blank" class="tracking-link">
-            Track with ${order.tracking.carrier}: ${order.tracking.number}
+      <div class="order-items">
+        ${order.items.map(item => `
+          <div class="order-item">
+            <span>${item.quantity}x ${escapeHtml(item.name)}</span>
+            <span>${money(item.price * item.quantity, order.currency)}</span>
+          </div>
+        `).join("")}
+      </div>
+      <div class="order-footer">
+        <strong class="order-total">Total: ${money(order.total, order.currency)}</strong>
+        <span class="order-date">${new Date(order.createdAt).toLocaleDateString()}</span>
+      </div>
+      ${order.tracking ? `
+        <div style="margin-top: 15px;">
+          <a href="${order.tracking.url}" target="_blank" class="button ghost mini" style="width: 100%; min-height: 34px;">
+            Track with ${order.tracking.carrier}
           </a>
-        ` : order.status === "shipped" ? '<p class="tracking-link">Tracking info coming soon...</p>' : ""}
-      </div>
+        </div>
+      ` : ""}
     </div>
   `).join("");
 }
@@ -824,13 +824,36 @@ async function loadAdmin() {
       `).join("") || "<p>No messages yet.</p>";
     }
 
-    adminUsers.innerHTML = payload.users.map((user) => `<article><strong>${escapeHtml(user.name)}</strong><span>${escapeHtml(user.email)} - ${user.orderCount} orders${user.isAdmin ? " - admin" : ""}</span></article>`).join("") || "<p>No users yet.</p>";
+    adminUsers.innerHTML = payload.users.map((user) => `
+      <div class="admin-user-card">
+        <div class="admin-user-info">
+          <strong>${escapeHtml(user.name)}</strong>
+          <span>${escapeHtml(user.email)} - ${user.orderCount} orders${user.isAdmin ? " - admin" : ""}</span>
+        </div>
+      </div>
+    `).join("") || "<p>No users yet.</p>";
+
     adminOrders.innerHTML = payload.orders.map((order) => `
-      <article>
-        <strong>${escapeHtml(order.statusLabel || order.status)}</strong>
-        <span>${escapeHtml(order.recipient?.email || "")} - ${money(order.total || 0, order.currency || currency)}</span>
-        ${!order.printfulOrder?.id ? `<button class="button primary mini" data-push-printful="${order.id}">Push to Printful</button>` : `<small style="color:var(--signal)">Synced: ${order.printfulOrder.id}</small>`}
-      </article>
+      <div class="admin-order-card">
+        <div class="order-header">
+          <span class="order-id">Order #${order.id.slice(-6).toUpperCase()}</span>
+          <span class="order-status ${order.status}">${order.statusLabel || order.status.replace(/_/g, " ")}</span>
+        </div>
+        <div class="admin-order-info">
+          <span class="admin-order-email">${escapeHtml(order.recipient?.email || "No email")}</span>
+          <strong class="order-total">${money(order.total || 0, order.currency || currency)}</strong>
+        </div>
+        <div class="admin-order-actions">
+          ${!order.printfulOrder?.id ? `
+            <button class="button primary mini" data-push-printful="${order.id}">PUSH TO PRINTFUL</button>
+          ` : `
+            <div class="status-badge">
+              <i></i>
+              Synced: ${order.printfulOrder.id}
+            </div>
+          `}
+        </div>
+      </div>
     `).join("") || "<p>No orders yet.</p>";
     adminDiscounts.innerHTML = payload.discountCodes.map((discount) => `
       <article>

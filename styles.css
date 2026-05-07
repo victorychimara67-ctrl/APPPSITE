@@ -441,6 +441,12 @@ h1 {
   box-shadow: 0 18px 44px rgba(255, 255, 255, 0.11);
 }
 
+.button.mini {
+  min-height: 32px;
+  padding: 0 14px;
+  font-size: 10px;
+}
+
 /* Original Product Grid */
 .product-grid {
   display: grid;
@@ -2295,6 +2301,162 @@ input[type="checkbox"] {
   border: 1px solid var(--line);
   border-radius: 4px;
   color: #fff;
+}
+
+/* --- Improved Order Cards --- */
+.user-orders-list, .admin-orders-list {
+  display: grid;
+  gap: 15px;
+  margin-top: 15px;
+}
+
+.user-order-card, .admin-order-card {
+  padding: 20px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  transition: transform 0.3s var(--ease), border-color 0.3s ease;
+}
+
+.user-order-card:hover, .admin-order-card:hover {
+  border-color: var(--accent);
+}
+
+.order-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 15px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 12px;
+}
+
+.order-id {
+  font-family: monospace;
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text);
+  letter-spacing: 1px;
+}
+
+.order-status {
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--muted);
+  letter-spacing: 0.5px;
+}
+
+.order-status.paid, .order-status.confirmed { background: rgba(121, 216, 199, 0.15); color: var(--signal); }
+.order-status.pending_payment { background: rgba(215, 180, 106, 0.15); color: var(--accent); }
+.order-status.draft, .order-status.preparation { background: rgba(255, 255, 255, 0.1); color: #fff; }
+.order-status.shipped, .order-status.dispatched { background: rgba(0, 255, 0, 0.1); color: #0f0; }
+
+.order-items {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 15px;
+}
+
+.order-item {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  color: #c2c2bc;
+}
+
+.order-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.order-total {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.order-date {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.admin-order-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 15px;
+}
+
+.admin-order-email {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.admin-order-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.status-badge {
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--signal);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.status-badge i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--signal);
+  box-shadow: 0 0 8px var(--signal);
+}
+
+/* User Admin List Layout */
+.admin-users-list {
+  display: grid;
+  gap: 10px;
+}
+
+.admin-user-card {
+  padding: 15px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.admin-user-info strong {
+  display: block;
+  font-size: 14px;
+}
+
+.admin-user-info span {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* Admin Orders Layout */
+#adminOrders {
+  display: grid;
+  gap: 12px;
+}
+
+/* Ensure admin columns are clean */
+.admin-columns section {
+  margin-bottom: 30px;
 }
 
 .admin-popup-form input[type="checkbox"] {

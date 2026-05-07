@@ -1121,12 +1121,15 @@ function verifyStripeSignature(rawBody, signatureHeader) {
 async function submitOrderToPrintful(order) {
   if (!PRINTFUL_TOKEN) {
     order.status = "paid_pending_printful_configuration";
+    console.warn(`Printful token missing for order ${order.id}`);
     return order;
   }
   if (order.printfulOrder?.id) return order;
   
+  console.log(`Submitting order ${order.id} to Printful...`);
+
   // Back to Manual Draft Mode: change to true if you want auto-production
-  const shouldConfirm = process.env.PRINTFUL_AUTO_CONFIRM === "true" || false; 
+  const shouldConfirm = String(process.env.PRINTFUL_AUTO_CONFIRM).toLowerCase() === "true"; 
   const query = shouldConfirm ? "?confirm=1" : "?confirm=0";
   
   const printfulItems = await Promise.all(order.items.map(async (item) => {
@@ -1141,7 +1144,7 @@ async function submitOrderToPrintful(order) {
     
     // 3. SUPER-AGGRESSIVE SEARCH: If still missing, look through synced products with fallback logic
     if (!syncVariantId) {
-      console.log(`Aggressive Search in Printful for: ${item.name}`);
+      console.log(`Aggressive Search in Printful for: "${item.name}" (Product ID: ${item.productId})`);
       const synced = await getProducts();
       
       // Stage A: Exact name match
@@ -1155,10 +1158,10 @@ async function submitOrderToPrintful(order) {
       
       // Stage C: Keyword match (e.g., find ANY hoodie if name is 'ECI Hoodie')
       if (!match) {
-        const keywords = item.name.toLowerCase().split(" ");
+        const keywords = item.name.toLowerCase().split(" ").filter(k => k.length > 3);
         match = synced.products.find(p => {
           const pName = p.name.toLowerCase();
-          return keywords.some(k => k.length > 3 && pName.includes(k));
+          return keywords.some(k => pName.includes(k));
         });
       }
 
@@ -1166,9 +1169,12 @@ async function submitOrderToPrintful(order) {
     }
 
     if (!syncVariantId) {
+      console.error(`FAILED to find Printful Variant for item: "${item.name}"`);
       throw new Error(`Variant ID missing for "${item.name}". Please ensure this product is synced in Printful and has a matching name.`);
     }
     
+    console.log(`Found Variant ID ${syncVariantId} for item "${item.name}"`);
+
     const files = [];
     // If there are custom images (from the 3D builder or upload), send them to Printful
     if (Array.isArray(item.customImages) && item.customImages.length > 0) {
@@ -1186,18 +1192,26 @@ async function submitOrderToPrintful(order) {
     };
   }));
 
-  const payload = await printful(`/orders${query}`, {
-    method: "POST",
-    body: JSON.stringify({
-      recipient: order.recipient,
-      items: printfulItems,
-      notes: formatOrderNotes(order)
-    })
-  });
-  order.status = shouldConfirm ? "submitted_to_printful" : "draft_in_printful";
-  order.printfulOrder = payload.result;
-  order.fulfilledAt = new Date().toISOString();
-  return order;
+  try {
+    const payload = await printful(`/orders${query}`, {
+      method: "POST",
+      body: JSON.stringify({
+        external_id: order.id,
+        recipient: order.recipient,
+        items: printfulItems,
+        notes: formatOrderNotes(order)
+      })
+    });
+    
+    order.status = shouldConfirm ? "submitted_to_printful" : "draft_in_printful";
+    order.printfulOrder = payload.result;
+    order.fulfilledAt = new Date().toISOString();
+    console.log(`Order ${order.id} pushed to Printful: ${payload.result?.id}`);
+    return order;
+  } catch (error) {
+    console.error(`Printful API Error for order ${order.id}:`, error.message);
+    throw error;
+  }
 }
 
 function formatOrderNotes(order) {
