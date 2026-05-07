@@ -1130,10 +1130,14 @@ function setupParallax(liteMotion) {
 function setupIntro(liteMotion) {
   const intro = document.querySelector(".intro");
   if (!intro) return;
-  if (liteMotion) {
+  
+  // Skip intro for bots (like Vercel screenshot bot) or if lite motion is active
+  const isBot = /bot|googlebot|crawler|spider|robot|crawling|vercel/i.test(navigator.userAgent);
+  
+  if (liteMotion || isBot) {
     document.documentElement.classList.add("network-lite");
     canvas?.remove();
-    setTimeout(() => intro.remove(), 720);
+    intro.remove();
     return;
   }
   setupParticles();
