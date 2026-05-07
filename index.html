@@ -240,6 +240,14 @@
               <p class="empty-orders">No orders found.</p>
             </div>
           </div>
+          <div class="redeem-section">
+            <h3>Redeem Gift Card</h3>
+            <div class="redeem-group">
+              <input type="text" id="profileRedeemInput" placeholder="ECI-XXXX" />
+              <button class="scan-btn" onclick="openScanner('profile')">Scan</button>
+              <button class="button primary" onclick="applyGiftCard('profile')">Apply</button>
+            </div>
+          </div>
           <button class="button ghost" id="logoutButton" type="button">Logout</button>
         </div>
       </div>
@@ -255,17 +263,13 @@
           <div class="checkout-grid">
             <label>Full Name<input name="name" required /></label>
             <label>Email<input name="email" type="email" required /></label>
-            <label>Phone<input name="phone" type="tel" autocomplete="tel" /></label>
+            <label>Gift Card / Discount<div class="redeem-group"><input name="discountCode" placeholder="ECI-XXXX" /><button type="button" class="scan-btn" onclick="openScanner()">Scan</button></div></label>
             <label>Address<input name="address1" required /></label>
             <label>City<input name="city" required /></label>
-            <label>State<input name="state_code" maxlength="2" placeholder="CA" /></label>
-            <label>Country<input name="country_code" maxlength="2" value="US" required /></label>
-            <label>ZIP<input name="zip" required /></label>
-            <label>Discount Code<input name="discountCode" placeholder="ECI10" /></label>
+            <label>Postal Code<input name="zip" required /></label>
           </div>
-          <div class="checkout-summary" id="checkoutSummary"></div>
-          <button class="button primary" type="submit">Continue To Secure Payment</button>
-          <p class="checkout-note">Submit the custom order form first. Stripe opens only after validation, and the order details travel with the payment metadata.</p>
+          <div id="checkoutSummary" class="checkout-summary"></div>
+          <button class="button primary" type="submit">Secure Payment</button>
         </form>
       </div>
     </div>
@@ -423,5 +427,31 @@
         </form>
       </div>
     </div>
+    <div class="modal" id="scannerModal" aria-hidden="true">
+      <div class="modal-panel" role="dialog" aria-modal="true">
+        <button class="modal-close" data-close="scannerModal">x</button>
+        <h2>Scan Code</h2>
+        <div class="scanner-modal">
+          <video id="scannerVideo" autoplay playsinline></video>
+          <div class="scanner-aim"></div>
+        </div>
+        <p style="margin-top:15px; font-size:12px; color:var(--muted); text-align:center;">Hold your gift card code inside the box</p>
+      </div>
+    </div>
+
+    <div id="printSection">
+      <div class="print-card">
+        <div class="print-logo">EMMANUEL CI UNIVERSE</div>
+        <div class="print-fold"></div>
+        <p>A GIFT FROM THE UNIVERSE</p>
+        <div class="print-amount" id="printAmount">20% OFF</div>
+        <div class="print-code" id="printCode">ECI-XXXX-XXXX</div>
+        <div class="print-qr" id="printQR">ECI SCAN</div>
+        <div class="print-fold"></div>
+        <p style="font-size: 10px;">Redeem at: emmanuel-ci-universe.vercel.app</p>
+      </div>
+    </div>
+
+    <script src="script.js" defer></script>
   </body>
 </html>

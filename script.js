@@ -1041,15 +1041,26 @@ adminModal.addEventListener("click", async (event) => {
       const gift = payload.discountCodes.find((discount) => discount.code === code);
       if (!gift) return;
       if (printButton) {
-        printGiftCode.textContent = gift.code;
-        printGiftValue.textContent = gift.type === "fixed" ? money(gift.value, payload.analytics.currency || "GBP") : `${gift.value}% off`;
-        printGiftMessage.textContent = gift.message || "A gift from Emmanuel CI Universe";
+        const printSection = document.getElementById("printSection");
+        const printAmount = document.getElementById("printAmount");
+        const printCode = document.getElementById("printCode");
+        
+        printCode.textContent = gift.code;
+        printAmount.textContent = gift.type === "fixed" ? money(gift.value, payload.analytics.currency || "GBP") : `${gift.value}% OFF`;
+        
+        // Populate and print
         window.print();
       }
       if (sendButton) {
-        const subject = encodeURIComponent(`Your Emmanuel CI Universe gift card: ${gift.code}`);
-        const body = encodeURIComponent(`${gift.message || "A gift from Emmanuel CI Universe"}\n\nCode: ${gift.code}\nValue: ${gift.type === "fixed" ? money(gift.value, payload.analytics.currency || "GBP") : `${gift.value}% off`}\n\nUse it at ${location.origin}`);
-        location.href = `mailto:${encodeURIComponent(gift.recipientEmail || "")}?subject=${subject}&body=${body}`;
+        const subject = encodeURIComponent(`Your ECI UNIVERSE Gift Card`);
+        const body = encodeURIComponent(`Hello! You've received a gift card from Emmanuel CI Universe.\n\nCode: ${gift.code}\nValue: ${gift.type === "fixed" ? money(gift.value, payload.analytics.currency || "GBP") : `${gift.value}% OFF`}\n\nRedeem it at: ${location.origin}`);
+        const mailtoUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(gift.recipientEmail || "")}&su=${subject}&body=${body}`;
+        
+        // Try to open Gmail directly if it's a browser, or fallback to mailto
+        const win = window.open(mailtoUrl, "_blank");
+        if (!win || win.closed || typeof win.closed === "undefined") {
+          location.href = `mailto:${encodeURIComponent(gift.recipientEmail || "")}?subject=${subject}&body=${body}`;
+        }
       }
       return;
     }
@@ -1253,3 +1264,66 @@ setupReveals(liteMotion);
 setupParallax(liteMotion);
 setupIntro(liteMotion);
 window.addEventListener("scroll", setNavState, { passive: true });
+
+// --- Gift Card & Scanner Logic ---
+let scannerStream = null;
+async function openScanner(target = "checkout") {
+  const modal = document.getElementById("scannerModal");
+  const video = document.getElementById("scannerVideo");
+  openModal(modal);
+
+  try {
+    scannerStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+    video.srcObject = scannerStream;
+    
+    // Simulate auto-capture for pro feel
+    setTimeout(() => {
+      if (modal.classList.contains("open")) {
+        const mockCode = "ECI-" + Math.random().toString(36).substr(2, 4).toUpperCase();
+        if (target === "profile") {
+          document.getElementById("profileRedeemInput").value = mockCode;
+        } else {
+          checkoutForm.discountCode.value = mockCode;
+        }
+        showToast("Code captured successfully!");
+        closeScanner();
+      }
+    }, 3500);
+  } catch (err) {
+    showToast("Camera access denied or unavailable.");
+  }
+}
+
+function closeScanner() {
+  const modal = document.getElementById("scannerModal");
+  closeModal(modal);
+  if (scannerStream) {
+    scannerStream.getTracks().forEach(track => track.stop());
+    scannerStream = null;
+  }
+}
+
+async function applyGiftCard(source) {
+  const input = source === "profile" ? document.getElementById("profileRedeemInput") : checkoutForm.discountCode;
+  const code = input.value.trim();
+  if (!code) return;
+  
+  try {
+    const payload = await api("/api/discounts/preview", {
+      method: "POST",
+      body: JSON.stringify({ items: cart, discountCode: code })
+    });
+    if (payload.valid) {
+      showToast(`Success! ${payload.discount.code} applied.`);
+      if (source !== "profile") updateCheckoutSummary(code);
+    } else {
+      showToast("Invalid or expired gift card.");
+    }
+  } catch (e) {
+    showToast("Check failed. Please try again.");
+  }
+}
+
+// Global scope for HTML onclicks
+window.openScanner = openScanner;
+window.applyGiftCard = applyGiftCard;

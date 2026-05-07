@@ -2403,3 +2403,38 @@ input[type="checkbox"] {
   padding: 8px 15px;
   font-size: 10px;
 }
+
+/* Amazon-Style Gift Card Print */
+@media print {
+  body > *:not(#printSection) { display: none !important; }
+  #printSection {
+    display: block !important;
+    background: #fff !important;
+    color: #000 !important;
+    padding: 60px;
+    text-align: center;
+    min-height: 100vh;
+  }
+  .print-card {
+    border: 2px dashed #333;
+    padding: 60px;
+    max-width: 600px;
+    margin: 0 auto;
+  }
+  .print-logo { font-size: 32px; font-weight: 900; letter-spacing: 5px; margin-bottom: 40px; }
+  .print-code { font-family: monospace; font-size: 38px; background: #eee; padding: 20px; margin: 30px 0; border: 1px solid #ccc; }
+  .print-fold { border-top: 1px dashed #666; margin: 60px 0; position: relative; }
+  .print-fold::after { content: " FOLD LINE\; position: absolute; top: -10px; left: 50%; transform: translateX(-50%); background: #fff; padding: 0 10px; font-size: 10px; }
+ .print-qr { width: 140px; height: 140px; margin: 20px auto; border: 2px solid #000; display: grid; place-items: center; font-weight: 800; }
+}
+#printSection { display: none; }
+
+/* Redemption & Scanner UI */
+.redeem-group { display: flex; gap: 8px; margin-top: 15px; }
+.redeem-group input { flex: 1; background: #111; border: 1px solid var(--line); color: #fff; padding: 12px; border-radius: 8px; }
+.scan-btn { background: var(--panel-soft); border: 1px solid var(--line); padding: 0 15px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; }
+.scanner-modal { width: 100%; aspect-ratio: 1; background: #000; border-radius: 12px; position: relative; overflow: hidden; }
+#scannerVideo { width: 100%; height: 100%; object-fit: cover; }
+.scanner-aim { position: absolute; inset: 50px; border: 2px solid var(--accent); box-shadow: 0 0 0 1000px rgba(0,0,0,0.5); pointer-events: none; }
+.scanner-aim::after { content: \\; position: absolute; top: 0; left: 0; width: 100%; height: 2px; background: var(--accent); animation: scanMove 2s infinite; }
+@keyframes scanMove { from { top: 0; } to { top: 100%; } }
