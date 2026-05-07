@@ -1127,25 +1127,29 @@ async function submitOrderToPrintful(order) {
   // Back to Manual Draft Mode: change to true if you want auto-production
   const shouldConfirm = process.env.PRINTFUL_AUTO_CONFIRM === "true" || false; 
   const query = shouldConfirm ? "?confirm=1" : "?confirm=0";
+  
   const printfulItems = await Promise.all(order.items.map(async (item) => {
-    // 1. Try ID from the order item itself
+    // 1. Try ID from the order item itself (if it was a synced product)
     let syncVariantId = item.printfulVariantId;
     
-    // 2. Try to find in local products or environment variables
+    // 2. Try the localProducts mapping or direct .env variable
     if (!syncVariantId) {
       const product = localProducts.find((p) => p.id === item.productId || p.name === item.name);
-      syncVariantId = product?.printfulVariantId || process.env[`PRINTFUL_VARIANT_${item.productId}`];
+      syncVariantId = product?.printfulVariantId || process.env[`PRINTFUL_VARIANT_${item.productId}`] || process.env[`PRINTFUL_VARIANT_${item.id}`];
     }
     
-    // 3. NUCLEAR OPTION: If still missing, try to find a match in the recently synced products
+    // 3. FUZZY SEARCH: If still missing, look through the actual Printful Sync products
     if (!syncVariantId) {
+      console.log(`Searching Printful for missing ID: ${item.name}`);
       const synced = await getProducts();
-      const match = synced.products.find(p => p.name.includes(item.name) || item.name.includes(p.name));
+      // Try exact name match, then partial name match
+      const match = synced.products.find(p => p.name === item.name) || 
+                    synced.products.find(p => p.name.toLowerCase().includes(item.name.toLowerCase()) || item.name.toLowerCase().includes(p.name.toLowerCase()));
       syncVariantId = match?.printfulVariantId || match?.variants?.[0]?.id;
     }
 
     if (!syncVariantId) {
-      throw new Error(`Variant ID missing for "${item.name}". Please sync Printful products in the Admin Panel.`);
+      throw new Error(`Variant ID missing for "${item.name}". Please ensure this product is synced in Printful and has a matching name.`);
     }
     
     return { sync_variant_id: Number(syncVariantId), quantity: item.quantity };
