@@ -469,7 +469,7 @@ async function printful(path, options = {}) {
     ...(PRINTFUL_STORE_ID ? { "X-PF-Store-Id": PRINTFUL_STORE_ID } : {}),
     ...(options.headers || {})
   };
-  const response = await fetchWithTimeout(`https://api.printful.com${path}`, { ...options, headers });
+  const response = await fetchWithTimeout(`https://api.printful.com${path}`, { ...options, headers }, options.timeout || 10000);
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
     const message = payload?.error?.message || payload?.result || `Printful request failed with ${response.status}`;
@@ -505,21 +505,25 @@ async function getProducts() {
       console.warn("Printful: No products found in store.");
     }
 
-    // Process products sequentially or in small chunks to avoid hitting Printful rate limits or hanging
-    const detailed = [];
-    for (const item of summaries) {
-      try {
-        const detail = await printful(`/store/products/${item.id}`);
-        const mapped = mapPrintfulProduct(item, detail.result);
-        if (mapped) detailed.push(mapped);
-      } catch (err) {
-        console.warn(`Printful: Failed to load detail for ${item.name || item.id}: ${err.message}`);
-        const fallback = mapPrintfulProduct(item, null);
-        if (fallback) detailed.push(fallback);
-      }
-    }
+    // Process products in parallel with a timeout for each to ensure speed
+    const detailed = await Promise.all(
+      summaries.map(async (item) => {
+        try {
+          const detail = await printful(`/store/products/${item.id}`, { timeout: 8000 });
+          return mapPrintfulProduct(item, detail.result);
+        } catch (err) {
+          console.warn(`Printful: Failed to load detail for ${item.name || item.id}: ${err.message}`);
+          return mapPrintfulProduct(item, null);
+        }
+      })
+    );
 
-    const products = detailed;
+    const products = detailed.filter(Boolean);
+    if (products.length === 0 && summaries.length > 0) {
+      console.warn("Printful: All product details failed to load, using summaries.");
+      // Fallback to minimal data if details fail
+      summaries.forEach(s => products.push(mapPrintfulProduct(s, null)));
+    }
     productCache = {
       expiresAt: Date.now() + 1000 * 60 * 10, // Cache for 10 minutes
       products,
@@ -556,8 +560,9 @@ function mapPrintfulProduct(summary, detail) {
   const rawVariants = detail?.sync_variants || [];
   const variants = rawVariants.filter((variant) => variant.is_ignored === false);
   const firstVariant = variants.find((variant) => variant.is_ignored === false) || variants[0];
-  if (!firstVariant) return null;
+  
   const price = Number(firstVariant?.retail_price || summary.retail_price || 0);
+  const currency = firstVariant?.currency || "USD";
   const previewImages = unique([
     summary.thumbnail_url,
     firstVariant?.thumbnail_url,
@@ -568,7 +573,7 @@ function mapPrintfulProduct(summary, detail) {
     id: `printful-${summary.id}`,
     name: summary.name || firstVariant?.name || "Printful Product",
     price: Number.isFinite(price) && price > 0 ? price : null,
-    currency: firstVariant?.currency || "USD",
+    currency: currency,
     image: summary.thumbnail_url || firstVariant?.thumbnail_url || "assets/reference-showroom.png",
     printfulProductId: summary.id,
     printfulVariantId: firstVariant?.id ? String(firstVariant.id) : "",

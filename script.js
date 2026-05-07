@@ -83,7 +83,7 @@ let products = {
 
 async function api(path, options = {}) {
   const controller = new AbortController();
-  const id = setTimeout(() => controller.abort(), 8000); // 8 second timeout
+  const id = setTimeout(() => controller.abort(), 25000); // Increased to 25 seconds for Printful sync
   
   try {
     const response = await fetch(path, {
@@ -248,6 +248,7 @@ function renderVariantSelect(product) {
 }
 
 async function loadProducts() {
+  const loader = productGrid.querySelector(".product-empty");
   try {
     const payload = await api("/api/products");
     allProducts = payload.products || [];
@@ -270,6 +271,7 @@ async function loadProducts() {
     if (productPath) openProductDetail(decodeURIComponent(productPath[1]), false);
   } catch (error) {
     console.warn("Product API failed, using local storefront fallback.", error);
+    if (loader) loader.textContent = "Syncing with the Universe... (Local Fallback)";
     // Hardcoded fallback list
     const fallbackList = [
       { id: "hoodie", name: "ECI Essential Hoodie", price: 89.99, image: "assets/product-hoodie.png" },
