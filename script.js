@@ -536,6 +536,15 @@ logoutButton.addEventListener("click", async () => {
   updateAuthUi();
   showToast("Logged out");
 });
+function normalizeCheckoutCountry(value = "US") {
+  const raw = String(value || "US").trim().toUpperCase();
+  const aliases = {
+    UK: "GB", "U.K.": "GB", "UNITED KINGDOM": "GB",
+    USA: "US", "UNITED STATES": "US"
+  };
+  return aliases[raw] || raw;
+}
+
 checkoutForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   if (!checkoutForm.reportValidity()) return;
@@ -550,7 +559,6 @@ checkoutForm.addEventListener("submit", async (event) => {
     return;
   }
   
-  // Check for items with null/0 prices
   const invalidItems = cart.filter(item => !item.price || item.price <= 0);
   if (invalidItems.length > 0) {
     showToast("Some items in your cart don't have pricing. Please remove them or refresh the page.");
@@ -565,10 +573,16 @@ checkoutForm.addEventListener("submit", async (event) => {
       submitButton.disabled = true;
       submitButton.textContent = "Opening Secure Payment...";
     }
+    
     const formData = Object.fromEntries(new FormData(checkoutForm));
     const { discountCode, size_notes, design_notes, requested_deadline, ...recipient } = formData;
+    
+    // Use the local normalization helper
     recipient.country_code = normalizeCheckoutCountry(recipient.country_code);
-    if (!["US", "CA", "AU"].includes(recipient.country_code)) recipient.state_code = "";
+    if (!["US", "CA", "AU"].includes(recipient.country_code)) {
+      recipient.state_code = "";
+    }
+    
     checkoutPayload = await api("/api/checkout/session", {
       method: "POST",
       body: JSON.stringify({
@@ -583,16 +597,15 @@ checkoutForm.addEventListener("submit", async (event) => {
       })
     });
     
-    if (!checkoutPayload.checkoutUrl) {
+    if (!checkoutPayload || !checkoutPayload.checkoutUrl) {
+      console.error("Missing checkout URL in response:", checkoutPayload);
       throw new Error("Stripe checkout URL was not generated. Please try again.");
     }
     
-    if (!checkoutPayload.checkoutUrl.startsWith("https://")) {
-      throw new Error(`Invalid checkout URL received: ${checkoutPayload.checkoutUrl}`);
-    }
-    
+    // Redirect to Stripe
     showToast("Redirecting to Stripe secure payment...");
     window.location.href = checkoutPayload.checkoutUrl;
+    
   } catch (error) {
     console.error("Checkout error:", error, { checkoutPayload });
     showToast(error.message || "Checkout failed. Please try again.");

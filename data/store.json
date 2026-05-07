@@ -21,6 +21,13 @@
       "email": "testcheckout@example.com",
       "passwordHash": "3f63d2fdf41cc5862ded37c3e37d6e58:4b134b10bc920c432db95e11ee14c0651f7101afb5213defd736b49d5727f60a",
       "createdAt": "2026-05-07T17:22:31.903Z"
+    },
+    {
+      "id": "cfc62aa0d40a418140d206f9",
+      "name": "Test User",
+      "email": "test1778175047326@example.com",
+      "passwordHash": "c5449ab83c60a4bbf59ecce6b009b62b:56a7e54e6fd0b277612c4533ca383e73e83c7a6dc383d628c63df6bee7d88e5a",
+      "createdAt": "2026-05-07T17:30:47.471Z"
     }
   ],
   "sessions": [
@@ -520,6 +527,54 @@
         "url": "https://checkout.stripe.com/c/pay/cs_test_a1PRDOEM15sMXCkfH6MkhdESptp9TAUPpN3bbLeBNDvuAU3phjV8lchDE4#fidnandhYHdWcXxpYCc%2FJ2FgY2RwaXEnKSdicGRmZGhqaWBTZHdsZGtxJz8nZmprcXdqaScpJ2R1bE5gfCc%2FJ3VuWnFgdnFaMDRRTk1BSVVpR0xTa2xDcDZhaD1tXTd1S3VTckAxRzRPPGNPZ3VkdWYza39mUFNQR2NRX1JqNDdyZzQxcnM0VTd2a1c8SXxCaFFJdzRDN2tLNlIwTXZQb0I1NV1LYlB9S3FtJyknY3dqaFZgd3Ngdyc%2FcXdwYCknZ2RmbmJ3anBrYUZqaWp3Jz8nJmNjY2NjYycpJ2lkfGpwcVF8dWAnPyd2bGtiaWBabHFgaCcpJ2BrZGdpYFVpZGZgbWppYWB3dic%2FcXdwYHgl",
         "paymentStatus": "unpaid",
         "createdAt": "2026-05-07T17:22:32.878Z"
+      }
+    },
+    {
+      "id": "f7f155525172b7a0e1402aa0",
+      "userId": "cfc62aa0d40a418140d206f9",
+      "recipient": {
+        "name": "Test User",
+        "email": "test@example.com",
+        "address1": "123 Test St",
+        "city": "London",
+        "country_code": "GB",
+        "zip": "SW1A1AA"
+      },
+      "customOrder": {
+        "sizeNotes": "",
+        "designNotes": "",
+        "requestedDeadline": ""
+      },
+      "items": [
+        {
+          "productId": "hoodie",
+          "quantity": 1,
+          "printfulVariantId": "",
+          "name": "ECI Essential Hoodie",
+          "price": 89.99,
+          "currency": "USD"
+        }
+      ],
+      "discount": {
+        "code": "",
+        "type": "",
+        "value": 0,
+        "subtotal": 89.99,
+        "discountAmount": 0,
+        "total": 89.99,
+        "currency": "USD"
+      },
+      "subtotal": 89.99,
+      "discountAmount": 0,
+      "total": 89.99,
+      "currency": "USD",
+      "status": "pending_payment",
+      "createdAt": "2026-05-07T17:30:47.487Z",
+      "stripe": {
+        "sessionId": "cs_test_a1MZc3rCVitJYSuDCRdxEvtlEJAs4DfAK5Ds0iexTkL92C4zq7RAynBiwM",
+        "url": "https://checkout.stripe.com/c/pay/cs_test_a1MZc3rCVitJYSuDCRdxEvtlEJAs4DfAK5Ds0iexTkL92C4zq7RAynBiwM#fidnandhYHdWcXxpYCc%2FJ2FgY2RwaXEnKSdicGRmZGhqaWBTZHdsZGtxJz8nZmprcXdqaScpJ2R1bE5gfCc%2FJ3VuWnFgdnFaMDRRTk1BSVVpR0xTa2xDcDZhaD1tXTd1S3VTckAxRzRPPGNPZ3VkdWYza39mUFNQR2NRX1JqNDdyZzQxcnM0VTd2a1c8SXxCaFFJdzRDN2tLNlIwTXZQb0I1NV1LYlB9S3FtJyknY3dqaFZgd3Ngdyc%2FcXdwYCknZ2RmbmJ3anBrYUZqaWp3Jz8nJmNjY2NjYycpJ2lkfGpwcVF8dWAnPyd2bGtiaWBabHFgaCcpJ2BrZGdpYFVpZGZgbWppYWB3dic%2FcXdwYHgl",
+        "paymentStatus": "unpaid",
+        "createdAt": "2026-05-07T17:30:48.163Z"
       }
     }
   ],
