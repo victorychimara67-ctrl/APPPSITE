@@ -1010,18 +1010,15 @@ async function createStripeCheckoutSession(req, order) {
 
     return session;
   } catch (error) {
-    console.error("Stripe checkout creation failed", { 
-      error: error.message, 
-      orderTotal: order.total, 
-      baseOrigin,
+    console.error("STRIPE SESSION ERROR:", {
+      message: error.message,
       type: error.type,
-      code: error.code
+      code: error.code,
+      param: error.param,
+      detail: error.raw || error
     });
     
-    // Final error catch-all for URL issues
-    if (error.message.includes("URL") || error.message.includes("origin")) {
-      throw new Error(`Checkout Error: We had trouble building the payment link. Please ensure your SITE_URL setting has no hidden characters.`);
-    }
+    // Throw the raw error so the user can see the exact Stripe message
     throw error;
   }
 }
