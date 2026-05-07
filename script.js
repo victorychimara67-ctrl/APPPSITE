@@ -436,6 +436,13 @@ productGrid.addEventListener("click", (event) => {
 });
 
 function addToCart(productId, selectedVariantId = "") {
+  if (!currentUser) {
+    closeModal(cartModal);
+    closeModal(productModal);
+    openModal(authModal);
+    showToast("Please log in to add items to your cart");
+    return;
+  }
   const product = products[productId];
   if (!product) return;
   
@@ -698,7 +705,7 @@ checkoutForm.addEventListener("submit", async (event) => {
     }
     
     const formData = Object.fromEntries(new FormData(checkoutForm));
-    const { discountCode, size_notes, design_notes, requested_deadline, ...recipient } = formData;
+    const { discountCode, ...recipient } = formData;
     
     // Use the local normalization helper
     recipient.country_code = normalizeCheckoutCountry(recipient.country_code);
@@ -712,11 +719,7 @@ checkoutForm.addEventListener("submit", async (event) => {
         recipient,
         items: cart,
         discountCode,
-        customOrder: {
-          sizeNotes: size_notes,
-          designNotes: design_notes,
-          requestedDeadline: requested_deadline
-        }
+        customOrder: {}
       })
     });
     
