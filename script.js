@@ -817,7 +817,13 @@ async function loadAdmin() {
     }
 
     adminUsers.innerHTML = payload.users.map((user) => `<article><strong>${escapeHtml(user.name)}</strong><span>${escapeHtml(user.email)} - ${user.orderCount} orders${user.isAdmin ? " - admin" : ""}</span></article>`).join("") || "<p>No users yet.</p>";
-    adminOrders.innerHTML = payload.orders.map((order) => `<article><strong>${escapeHtml(order.statusLabel || order.status)}</strong><span>${escapeHtml(order.recipient?.email || "")} - ${money(order.total || 0, order.currency || currency)}</span></article>`).join("") || "<p>No orders yet.</p>";
+    adminOrders.innerHTML = payload.orders.map((order) => `
+      <article>
+        <strong>${escapeHtml(order.statusLabel || order.status)}</strong>
+        <span>${escapeHtml(order.recipient?.email || "")} - ${money(order.total || 0, order.currency || currency)}</span>
+        ${!order.printfulOrder?.id ? `<button class="button primary mini" data-push-printful="${order.id}">Push to Printful</button>` : `<small style="color:var(--signal)">Synced: ${order.printfulOrder.id}</small>`}
+      </article>
+    `).join("") || "<p>No orders yet.</p>";
     adminDiscounts.innerHTML = payload.discountCodes.map((discount) => `
       <article>
         <strong>${escapeHtml(discount.code)}${discount.isGiftCard ? " - gift card" : ""}</strong>
@@ -1080,6 +1086,20 @@ adminModal.addEventListener("click", async (event) => {
       showToast("Product restored to storefront");
       await loadProducts();
       await loadAdmin();
+    }
+    const pushButton = event.target.closest("[data-push-printful]");
+    if (pushButton) {
+      pushButton.disabled = true;
+      pushButton.textContent = "Pushing...";
+      try {
+        await api(`/api/admin/orders/${pushButton.dataset.pushPrintful}/push-printful`, { method: "POST", body: "{}" });
+        showToast("Order pushed to Printful as Draft");
+        await loadAdmin();
+      } catch (e) {
+        showToast("Push failed: " + e.message);
+        pushButton.disabled = false;
+        pushButton.textContent = "Push to Printful";
+      }
     }
   } catch (error) {
     showToast(error.message);

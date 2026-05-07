@@ -1123,7 +1123,10 @@ async function submitOrderToPrintful(order) {
     return order;
   }
   if (order.printfulOrder?.id) return order;
-  const query = PRINTFUL_AUTO_CONFIRM ? "?confirm=1" : "?confirm=0";
+  
+  // Back to Manual Draft Mode: change to true if you want auto-production
+  const shouldConfirm = process.env.PRINTFUL_AUTO_CONFIRM === "true" || false; 
+  const query = shouldConfirm ? "?confirm=1" : "?confirm=0";
   const printfulItems = order.items.map((item) => {
     const product = localProducts.find((candidate) => candidate.id === item.productId);
     const syncVariantId = item.printfulVariantId || product?.printfulVariantId;
@@ -1138,7 +1141,7 @@ async function submitOrderToPrintful(order) {
       notes: formatOrderNotes(order)
     })
   });
-  order.status = PRINTFUL_AUTO_CONFIRM ? "submitted_to_printful" : "draft_in_printful";
+  order.status = shouldConfirm ? "submitted_to_printful" : "draft_in_printful";
   order.printfulOrder = payload.result;
   order.fulfilledAt = new Date().toISOString();
   return order;
@@ -1324,7 +1327,20 @@ async function routeAdmin(req, res, pathname) {
     return json(res, 200, { popupConfig: db.popupConfig });
   }
 
-  return json(res, 404, { error: "Admin route not found." });
+  if (req.method === "POST" && pathname.startsWith("/api/admin/orders/") && pathname.endsWith("/push-printful")) {
+    const orderId = pathname.replace("/api/admin/orders/", "").replace("/push-printful", "");
+    const order = db.orders.find(o => o.id === orderId);
+    if (!order) return json(res, 404, { error: "Order not found" });
+    try {
+      await submitOrderToPrintful(order);
+      writeDb(db);
+      return json(res, 200, { success: true, order });
+    } catch (e) {
+      return json(res, 500, { error: e.message });
+    }
+  }
+  
+  return json(res, 404, { error: "Admin route not found" });
 }
 
 function serveStatic(req, res, pathname) {
