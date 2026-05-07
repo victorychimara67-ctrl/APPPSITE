@@ -556,9 +556,11 @@ checkoutForm.addEventListener("submit", async (event) => {
     showToast("Some items in your cart don't have pricing. Please remove them or refresh the page.");
     return;
   }
+
+  const submitButton = checkoutForm.querySelector('button[type="submit"]');
+  let checkoutPayload = null;
   
   try {
-    const submitButton = checkoutForm.querySelector('button[type="submit"]');
     if (submitButton) {
       submitButton.disabled = true;
       submitButton.textContent = "Opening Secure Payment...";
@@ -567,7 +569,7 @@ checkoutForm.addEventListener("submit", async (event) => {
     const { discountCode, size_notes, design_notes, requested_deadline, ...recipient } = formData;
     recipient.country_code = normalizeCheckoutCountry(recipient.country_code);
     if (!["US", "CA", "AU"].includes(recipient.country_code)) recipient.state_code = "";
-    const payload = await api("/api/checkout/session", {
+    checkoutPayload = await api("/api/checkout/session", {
       method: "POST",
       body: JSON.stringify({
         recipient,
@@ -581,21 +583,19 @@ checkoutForm.addEventListener("submit", async (event) => {
       })
     });
     
-    if (!payload.checkoutUrl) {
+    if (!checkoutPayload.checkoutUrl) {
       throw new Error("Stripe checkout URL was not generated. Please try again.");
     }
     
-    if (!payload.checkoutUrl.startsWith("https://")) {
-      throw new Error(`Invalid checkout URL received: ${payload.checkoutUrl}`);
+    if (!checkoutPayload.checkoutUrl.startsWith("https://")) {
+      throw new Error(`Invalid checkout URL received: ${checkoutPayload.checkoutUrl}`);
     }
     
-    showToast("Redirecting to Stripe secure payment");
-    window.location.href = payload.checkoutUrl;
+    showToast("Redirecting to Stripe secure payment...");
+    window.location.href = checkoutPayload.checkoutUrl;
   } catch (error) {
-    console.error("Checkout error:", error, { payload });
+    console.error("Checkout error:", error, { checkoutPayload });
     showToast(error.message || "Checkout failed. Please try again.");
-  } finally {
-    const submitButton = checkoutForm.querySelector('button[type="submit"]');
     if (submitButton) {
       submitButton.disabled = false;
       submitButton.textContent = "Continue To Secure Payment";

@@ -1171,14 +1171,23 @@ function serveStatic(req, res, pathname) {
   createReadStream(filePath).pipe(res);
 }
 
-createServer(async (req, res) => {
-  const url = new URL(req.url, `http://${req.headers.host}`);
+async function handleRequest(req, res) {
+  const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
   if (url.pathname.startsWith("/api/")) {
     await routeApi(req, res, url.pathname);
     return;
   }
   serveStatic(req, res, url.pathname);
-}).listen(PORT, () => {
-  console.log(`Emmanuel CI Universe running at http://localhost:${PORT}`);
-  console.log(`Printful integration: ${PRINTFUL_TOKEN ? "configured" : "waiting for PRINTFUL_TOKEN"}`);
-});
+}
+
+// Vercel serverless function export
+export default handleRequest;
+
+// Local development server
+if (!process.env.VERCEL) {
+  createServer(handleRequest).listen(PORT, () => {
+    console.log(`Emmanuel CI Universe running at http://localhost:${PORT}`);
+    console.log(`Stripe integration: ${STRIPE_SECRET_KEY ? "configured" : "waiting for STRIPE_SECRET_KEY"}`);
+    console.log(`Printful integration: ${PRINTFUL_TOKEN ? "configured" : "waiting for PRINTFUL_TOKEN"}`);
+  });
+}

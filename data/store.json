@@ -14,6 +14,13 @@
       "email": "heheyaya405@gmail.com",
       "passwordHash": "f5bec9acd82053c5e804803fe37bed8b:ac807a147c62741cba86be7b49edce547d3d9a9a6740f5b50838e274adba6b48",
       "createdAt": "2026-05-02T19:11:21.249Z"
+    },
+    {
+      "id": "9243f2a39467ff0d755c0f04",
+      "name": "Test User",
+      "email": "testcheckout@example.com",
+      "passwordHash": "3f63d2fdf41cc5862ded37c3e37d6e58:4b134b10bc920c432db95e11ee14c0651f7101afb5213defd736b49d5727f60a",
+      "createdAt": "2026-05-07T17:22:31.903Z"
     }
   ],
   "sessions": [
@@ -465,6 +472,54 @@
           "total": 222
         },
         "gift": null
+      }
+    },
+    {
+      "id": "6a0ac1be56971d80066c3d21",
+      "userId": "9243f2a39467ff0d755c0f04",
+      "recipient": {
+        "name": "Test User",
+        "email": "testcheckout@example.com",
+        "address1": "123 Test St",
+        "city": "London",
+        "country_code": "GB",
+        "zip": "SW1A1AA"
+      },
+      "customOrder": {
+        "sizeNotes": "",
+        "designNotes": "",
+        "requestedDeadline": ""
+      },
+      "items": [
+        {
+          "productId": "hoodie",
+          "quantity": 1,
+          "printfulVariantId": "",
+          "name": "ECI Essential Hoodie",
+          "price": 89.99,
+          "currency": "USD"
+        }
+      ],
+      "discount": {
+        "code": "",
+        "type": "",
+        "value": 0,
+        "subtotal": 89.99,
+        "discountAmount": 0,
+        "total": 89.99,
+        "currency": "USD"
+      },
+      "subtotal": 89.99,
+      "discountAmount": 0,
+      "total": 89.99,
+      "currency": "USD",
+      "status": "pending_payment",
+      "createdAt": "2026-05-07T17:22:31.921Z",
+      "stripe": {
+        "sessionId": "cs_test_a1PRDOEM15sMXCkfH6MkhdESptp9TAUPpN3bbLeBNDvuAU3phjV8lchDE4",
+        "url": "https://checkout.stripe.com/c/pay/cs_test_a1PRDOEM15sMXCkfH6MkhdESptp9TAUPpN3bbLeBNDvuAU3phjV8lchDE4#fidnandhYHdWcXxpYCc%2FJ2FgY2RwaXEnKSdicGRmZGhqaWBTZHdsZGtxJz8nZmprcXdqaScpJ2R1bE5gfCc%2FJ3VuWnFgdnFaMDRRTk1BSVVpR0xTa2xDcDZhaD1tXTd1S3VTckAxRzRPPGNPZ3VkdWYza39mUFNQR2NRX1JqNDdyZzQxcnM0VTd2a1c8SXxCaFFJdzRDN2tLNlIwTXZQb0I1NV1LYlB9S3FtJyknY3dqaFZgd3Ngdyc%2FcXdwYCknZ2RmbmJ3anBrYUZqaWp3Jz8nJmNjY2NjYycpJ2lkfGpwcVF8dWAnPyd2bGtiaWBabHFgaCcpJ2BrZGdpYFVpZGZgbWppYWB3dic%2FcXdwYHgl",
+        "paymentStatus": "unpaid",
+        "createdAt": "2026-05-07T17:22:32.878Z"
       }
     }
   ],
