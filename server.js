@@ -938,25 +938,35 @@ async function createStripeCheckoutSession(req, order) {
     throw new Error("Stripe secret key is not configured on the server.");
   }
 
-  const stripe = Stripe(STRIPE_SECRET_KEY.trim());
+  const stripe = Stripe(STRIPE_SECRET_KEY.trim().replace(/[^\x20-\x7E]/g, ""));
 
   const amount = stripeAmount(order.total);
   if (amount <= 0) {
     throw new Error("Stripe requires an order total greater than zero.");
   }
 
-  // Get base origin and clean it
-  let baseOrigin = (SITE_URL || getRequestOrigin(req)).trim();
+  // NUCLEAR CLEANUP: Remove ANY non-printable or invisible characters
+  const clean = (val) => String(val || "").replace(/[^\x20-\x7E]/g, "").trim();
   
-  // Ensure we have a valid absolute URL
-  if (!baseOrigin.startsWith("http")) {
-    baseOrigin = `https://${baseOrigin.replace(/^\/+/, "")}`;
+  let baseOrigin = "";
+  try {
+    // Try SITE_URL first, but clean it aggressively
+    const rawSiteUrl = clean(SITE_URL);
+    if (rawSiteUrl && rawSiteUrl.startsWith("http")) {
+      const parsed = new URL(rawSiteUrl);
+      baseOrigin = parsed.origin;
+    }
+  } catch (e) {
+    console.warn("SITE_URL is malformed, falling back to request info");
+  }
+
+  // Fallback to auto-detected origin if SITE_URL failed
+  if (!baseOrigin) {
+    baseOrigin = getRequestOrigin(req);
   }
 
   try {
-    // Log the exact origin being used to help debugging
-    console.log("Using origin for Stripe redirect:", baseOrigin);
-
+    // Final safety check: ensure baseOrigin is a valid URL string for the constructor
     const successUrl = new URL("/", baseOrigin);
     successUrl.searchParams.set("payment", "success");
     successUrl.searchParams.set("order", order.id);
@@ -965,7 +975,7 @@ async function createStripeCheckoutSession(req, order) {
     cancelUrl.searchParams.set("payment", "cancelled");
     cancelUrl.searchParams.set("order", order.id);
     
-    console.log("Stripe Checkout URLs built:", { 
+    console.log("Stripe Checkout Ready:", { 
       success: successUrl.toString(), 
       cancel: cancelUrl.toString() 
     });
@@ -1008,8 +1018,9 @@ async function createStripeCheckoutSession(req, order) {
       code: error.code
     });
     
-    if (error.message.includes("Not a valid URL")) {
-      throw new Error(`Stripe rejected the redirect URL. Your SITE_URL might have a hidden character or invalid format. Current origin: ${baseOrigin}`);
+    // Final error catch-all for URL issues
+    if (error.message.includes("URL") || error.message.includes("origin")) {
+      throw new Error(`Checkout Error: We had trouble building the payment link. Please ensure your SITE_URL setting has no hidden characters.`);
     }
     throw error;
   }
