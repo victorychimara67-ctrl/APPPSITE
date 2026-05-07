@@ -1024,21 +1024,21 @@ async function createStripeCheckoutSession(req, order) {
   // NUCLEAR CLEANUP: Remove ANY non-printable or invisible characters
   const clean = (val) => String(val || "").replace(/[^\x20-\x7E]/g, "").trim();
   
-  let baseOrigin = "";
-  try {
-    // Try SITE_URL first, but clean it aggressively
-    const rawSiteUrl = clean(SITE_URL);
-    if (rawSiteUrl && rawSiteUrl.startsWith("http")) {
-      const parsed = new URL(rawSiteUrl);
-      baseOrigin = parsed.origin;
+  // Determine base origin: 
+  // If request is from localhost, use that. Otherwise use SITE_URL.
+  const reqOrigin = getRequestOrigin(req);
+  let baseOrigin = reqOrigin;
+  
+  if (!reqOrigin.includes("localhost") && !reqOrigin.includes("127.0.0.1")) {
+    try {
+      const rawSiteUrl = clean(SITE_URL);
+      if (rawSiteUrl && rawSiteUrl.startsWith("http")) {
+        const parsed = new URL(rawSiteUrl);
+        baseOrigin = parsed.origin;
+      }
+    } catch (e) {
+      console.warn("SITE_URL is malformed, using request origin");
     }
-  } catch (e) {
-    console.warn("SITE_URL is malformed, falling back to request info");
-  }
-
-  // Fallback to auto-detected origin if SITE_URL failed
-  if (!baseOrigin) {
-    baseOrigin = getRequestOrigin(req);
   }
 
   try {

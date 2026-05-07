@@ -620,14 +620,23 @@ checkoutForm.discountCode?.addEventListener("input", () => {
 
 loginForm.addEventListener("submit", async (event) => {
   event.preventDefault();
+  const formData = new FormData(loginForm);
+  const data = Object.fromEntries(formData);
+  const email = String(data.email || "").trim().toLowerCase();
+  
   try {
-    const data = Object.fromEntries(new FormData(loginForm));
     const payload = await api("/api/auth/login", { method: "POST", body: JSON.stringify(data) });
     currentUser = payload.user;
     updateAuthUi();
-    showToast("Logged in");
+    showToast(`Welcome back, ${currentUser.name}`);
+    closeModal(authModal);
   } catch (error) {
-    showToast(error.message);
+    let msg = error.message;
+    // Helpful hint for the specific typo I saw in the screenshot
+    if (email.includes("yayc") && !email.includes("yaya")) {
+      msg += " (Did you mean 'yaya' instead of 'yayc'?)";
+    }
+    showToast(msg);
   }
 });
 
@@ -1137,21 +1146,35 @@ adminModal.addEventListener("click", async (event) => {
   }
 });
 
-function handlePaymentReturn() {
+async function handlePaymentReturn() {
   const params = new URLSearchParams(window.location.search);
   const payment = params.get("payment");
+  const orderId = params.get("order");
+  
   if (!payment) return;
+  
   if (payment === "success") {
     cart = [];
     persistCart();
-    showToast("Payment received. Your ECI order is being prepared.");
-    // Force refresh the session and orders immediately
-    loadSession();
+    showToast("Payment confirmed! Your ECI order is now in preparation.");
+    
+    // 1. Refresh session to ensure we are logged in
+    await loadSession();
+    
+    // 2. If logged in, open the profile/orders modal automatically
+    if (currentUser) {
+      openModal(authModal);
+      // If we have a specific order ID, we could highlight it, but showing the list is enough
+      renderUserOrders(currentUser.orders || []);
+    }
   }
+  
   if (payment === "cancelled") {
     showToast("Payment cancelled. Your cart is still saved.");
     if (cartModal) openModal(cartModal);
   }
+  
+  // Clean up URL without refreshing
   history.replaceState({}, "", `${location.pathname}${location.hash || ""}`);
 }
 
