@@ -233,6 +233,13 @@ function migrateDb(db) {
   db.orders ||= [];
   db.hiddenProducts ||= [];
   db.discountCodes ||= [];
+  db.products ||= [];
+  
+  // Restore default products if empty (happens on first Supabase sync)
+  if (db.products.length === 0) {
+    db.products = [...localProducts];
+  }
+
   db.productOverrides ||= {};
   db.messages ||= [];
   db.popupConfig ||= { enabled: true, title: "Join the Universe", text: "Take 10% OFF your first custom piece.", code: "ECI10", targetEmails: [] };

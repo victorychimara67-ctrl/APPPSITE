@@ -871,11 +871,6 @@ async function loadAdmin() {
       `).join("") || "<p>No traffic data yet.</p>";
     }
 
-    const tickerForm = document.getElementById("adminTickerForm");
-    if (tickerForm && payload.ticker !== undefined) {
-      tickerForm.ticker.value = payload.ticker;
-    }
-
     const popupForm = document.getElementById("adminPopupForm");
     if (popupForm && payload.popupConfig) {
       popupForm.enabled.checked = payload.popupConfig.enabled;
@@ -1063,22 +1058,6 @@ if (adminPopupForm) {
       await api("/api/admin/popup-config", { method: "POST", body: JSON.stringify(data) });
       showToast("Popup configuration updated");
       await loadAdmin();
-    } catch (error) {
-      showToast(error.message);
-    }
-  });
-}
-
-const adminTickerForm = document.getElementById("adminTickerForm");
-if (adminTickerForm) {
-  adminTickerForm.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    try {
-      const data = Object.fromEntries(new FormData(adminTickerForm));
-      await api("/api/admin/ticker", { method: "POST", body: JSON.stringify(data) });
-      showToast("Ticker updated successfully");
-      await loadAdmin();
-      await loadProducts(); // Refresh live site ticker
     } catch (error) {
       showToast(error.message);
     }
