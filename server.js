@@ -75,14 +75,13 @@ function loadEnv() {
     if (!line || line.startsWith("#") || !line.includes("=")) continue;
     const [key, ...parts] = line.split("=");
     const cleanKey = key.replace(/^\uFEFF/, "").trim();
-    if (!process.env[cleanKey]) {
-      // Strip quotes if present
-      let value = parts.join("=").trim();
-      if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
-        value = value.slice(1, -1);
-      }
-      process.env[cleanKey] = value;
+    
+    // Allow overwriting if the value is empty/null, or always load from .env for consistency
+    let value = parts.join("=").trim();
+    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+      value = value.slice(1, -1);
     }
+    process.env[cleanKey] = value;
   }
 }
 
@@ -103,34 +102,28 @@ async function loadDb() {
 
   if (supabaseUrl && supabaseKey) {
     try {
-      console.log(`Supabase Debug: Attempting fetch from ${supabaseUrl}/rest/v1/storage...`);
-      const res = await fetch(`${supabaseUrl}/rest/v1/storage?id=eq.main&select=data`, {
+      console.log(`Supabase: Attempting cloud sync...`);
+      const res = await fetchWithTimeout(`${supabaseUrl}/rest/v1/storage?id=eq.main&select=data`, {
         headers: { "apikey": supabaseKey, "Authorization": `Bearer ${supabaseKey}` }
-      });
+      }, 5000); // 5 second timeout for DB load
       
-      if (!res.ok) {
-        const errText = await res.text();
-        console.error(`Supabase ERROR [${res.status}]:`, errText);
-        throw new Error(`HTTP ${res.status}: ${errText}`);
-      }
-
-      const items = await res.json();
-      console.log(`Supabase Debug: Received ${items.length} items.`);
-      
-      if (items && items[0]?.data) {
-        console.log("Supabase Success: State loaded from cloud.");
-        memoryDb = migrateDb(items[0].data);
-        return memoryDb;
+      if (res.ok) {
+        const items = await res.json();
+        if (items && items[0]?.data) {
+          console.log("Supabase: Cloud state loaded.");
+          memoryDb = migrateDb(items[0].data);
+          return memoryDb;
+        }
       } else {
-        console.warn("Supabase Warning: No row found with id='main'. Make sure you ran the SQL script.");
+        const errText = await res.text().catch(() => "Unknown error");
+        console.warn(`Supabase: Load failed (${res.status}): ${errText}`);
       }
     } catch (e) {
-      console.error("Supabase CRITICAL FAILURE:", e.message);
+      console.error("Supabase: CRITICAL FAILURE during load:", e.message);
     }
-  } else {
-    console.warn("Supabase Config: Missing URL or Key. Using local storage.");
   }
 
+  console.log("Database: Using local/memory fallback.");
   memoryDb = loadDbFile();
   return memoryDb;
 }
@@ -455,6 +448,19 @@ function requireUser(req, res) {
   return session;
 }
 
+async function fetchWithTimeout(url, options = {}, timeout = 10000) {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeout);
+  try {
+    const response = await fetch(url, { ...options, signal: controller.signal });
+    clearTimeout(id);
+    return response;
+  } catch (e) {
+    clearTimeout(id);
+    throw e;
+  }
+}
+
 async function printful(path, options = {}) {
   if (!PRINTFUL_TOKEN) throw new Error("Printful token is not configured.");
   const headers = {
@@ -463,7 +469,7 @@ async function printful(path, options = {}) {
     ...(PRINTFUL_STORE_ID ? { "X-PF-Store-Id": PRINTFUL_STORE_ID } : {}),
     ...(options.headers || {})
   };
-  const response = await fetch(`https://api.printful.com${path}`, { ...options, headers });
+  const response = await fetchWithTimeout(`https://api.printful.com${path}`, { ...options, headers });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
     const message = payload?.error?.message || payload?.result || `Printful request failed with ${response.status}`;
@@ -475,47 +481,62 @@ async function printful(path, options = {}) {
 async function getProducts() {
   const db = readDb();
   const hidden = new Set(db.hiddenProducts || []);
-  if (!PRINTFUL_TOKEN) return { source: "local", products: applyProductOverrides(localProducts, db).filter((product) => !hidden.has(product.id)) };
+  
+  if (!PRINTFUL_TOKEN) {
+    console.log("Printful: No token, using local products.");
+    return { source: "local", products: applyProductOverrides(localProducts, db).filter((p) => !hidden.has(p.id)) };
+  }
+
   if (productCache.products && productCache.expiresAt > Date.now()) {
     return {
       source: productCache.source || "printful",
       connected: productCache.connected,
       warning: productCache.warning || "",
-      products: applyProductOverrides(productCache.products, db).filter((product) => !hidden.has(product.id))
+      products: applyProductOverrides(productCache.products, db).filter((p) => !hidden.has(p.id))
     };
   }
 
   try {
+    console.log("Printful: Syncing products...");
     const payload = await printful("/store/products?limit=100");
-    const summaries = (payload.result || []).filter((item) => item.synced !== false);
-    const detailed = await Promise.all(
-      summaries.map(async (item) => {
-        try {
-          const detail = await printful(`/store/products/${item.id}`);
-          return mapPrintfulProduct(item, detail.result);
-        } catch {
-          return mapPrintfulProduct(item, null);
-        }
-      })
-    );
+    const summaries = (payload.result || []);
+    
+    if (summaries.length === 0) {
+      console.warn("Printful: No products found in store.");
+    }
 
-    const products = detailed.filter(Boolean);
+    // Process products sequentially or in small chunks to avoid hitting Printful rate limits or hanging
+    const detailed = [];
+    for (const item of summaries) {
+      try {
+        const detail = await printful(`/store/products/${item.id}`);
+        const mapped = mapPrintfulProduct(item, detail.result);
+        if (mapped) detailed.push(mapped);
+      } catch (err) {
+        console.warn(`Printful: Failed to load detail for ${item.name || item.id}: ${err.message}`);
+        const fallback = mapPrintfulProduct(item, null);
+        if (fallback) detailed.push(fallback);
+      }
+    }
+
+    const products = detailed;
     productCache = {
-      expiresAt: Date.now() + 1000 * 60 * 5,
+      expiresAt: Date.now() + 1000 * 60 * 10, // Cache for 10 minutes
       products,
       source: "printful",
       connected: true,
       warning: ""
     };
-    return { source: "printful", connected: true, products: applyProductOverrides(productCache.products, db).filter((product) => !hidden.has(product.id)) };
+    console.log(`Printful: Synced ${products.length} products.`);
+    return { source: "printful", connected: true, products: applyProductOverrides(productCache.products, db).filter((p) => !hidden.has(p.id)) };
   } catch (error) {
-    console.warn(`Printful API error: ${error.message}`);
+    console.warn(`Printful: API Sync failed: ${error.message}`);
     productCache = {
-      expiresAt: Date.now() + 1000 * 60,
-      products: applyProductOverrides(localProducts, db).filter((product) => !hidden.has(product.id)),
+      expiresAt: Date.now() + 1000 * 60 * 2, // Try again in 2 minutes
+      products: applyProductOverrides(localProducts, db).filter((p) => !hidden.has(p.id)),
       source: "local_fallback",
       connected: false,
-      warning: `Printful temporarily unavailable, showing local products: ${error.message}`
+      warning: `Printful unavailable: ${error.message}`
     };
     return {
       source: productCache.source,
@@ -1837,13 +1858,14 @@ async function handleRequest(req, res) {
   await ensureDb();
   const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
   
-  // Basic Analytics & Live Users
-  if (!url.pathname.startsWith("/api/")) {
+  // Basic Analytics & Live Users (optimized to avoid redundant DB writes)
+  if (!url.pathname.startsWith("/api/") && !url.pathname.includes(".")) {
     const db = readDb();
     db.analytics.totalVisits++;
     const ref = req.headers.referer || "Direct";
     db.analytics.referrers[ref] = (db.analytics.referrers[ref] || 0) + 1;
-    await writeDb(db);
+    // Debounce or only write on API calls/milestones
+    if (db.analytics.totalVisits % 5 === 0) await writeDb(db);
   }
 
   // Heartbeat for live users
