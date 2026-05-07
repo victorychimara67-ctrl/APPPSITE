@@ -395,7 +395,7 @@ document.querySelectorAll("[data-close]").forEach((button) => {
 });
 
 adminButton.addEventListener("click", () => {
-  loadAdminData();
+  loadAdmin();
   openModal(adminModal);
   startAdminPolling();
 });
@@ -615,9 +615,6 @@ loginForm.addEventListener("submit", async (event) => {
     showToast("Logged in");
   } catch (error) {
     showToast(error.message);
-  }
-});
-
   }
 });
 
@@ -1188,7 +1185,7 @@ enableLazyImages(document);
 let adminPollInterval = null;
 function startAdminPolling() {
   if (adminPollInterval) clearInterval(adminPollInterval);
-  adminPollInterval = setInterval(loadAdminData, 30000); // 30 seconds
+  adminPollInterval = setInterval(loadAdmin, 30000); // 30 seconds
 }
 
 // Dynamic Pop-up Logic
