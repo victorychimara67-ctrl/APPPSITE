@@ -933,21 +933,26 @@ async function createStripeCheckoutSession(req, order) {
     throw new Error("Stripe requires an order total greater than zero.");
   }
 
-  // Ensure origin is clean and has no trailing spaces or slashes
-  let origin = (SITE_URL || getRequestOrigin(req)).trim().replace(/\/+$/, "");
-  
-  // Fallback to request host if origin is somehow still broken
-  if (!origin || !origin.startsWith("http")) {
-    const proto = req.headers["x-forwarded-proto"] || "http";
-    const host = req.headers.host || `localhost:${PORT}`;
-    origin = `${proto}://${host}`;
+  // Get base origin and clean it
+  let baseOrigin = (SITE_URL || getRequestOrigin(req)).trim();
+  if (!baseOrigin.startsWith("http")) {
+    baseOrigin = `https://${baseOrigin}`;
   }
 
   try {
-    const successUrl = `${origin}/?payment=success&order=${order.id}`;
-    const cancelUrl = `${origin}/?payment=cancelled&order=${order.id}`;
+    // Use the URL class for bulletproof URL construction
+    const successUrl = new URL("/", baseOrigin);
+    successUrl.searchParams.set("payment", "success");
+    successUrl.searchParams.set("order", order.id);
+
+    const cancelUrl = new URL("/", baseOrigin);
+    cancelUrl.searchParams.set("payment", "cancelled");
+    cancelUrl.searchParams.set("order", order.id);
     
-    console.log("Creating Stripe session with URLs:", { successUrl, cancelUrl });
+    console.log("Stripe Checkout URLs built:", { 
+      success: successUrl.toString(), 
+      cancel: cancelUrl.toString() 
+    });
 
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
@@ -969,8 +974,8 @@ async function createStripeCheckoutSession(req, order) {
         }
       ],
 
-      success_url: successUrl,
-      cancel_url: cancelUrl
+      success_url: successUrl.toString(),
+      cancel_url: cancelUrl.toString()
     });
 
     if (!session.url) {
@@ -982,13 +987,13 @@ async function createStripeCheckoutSession(req, order) {
     console.error("Stripe checkout creation failed", { 
       error: error.message, 
       orderTotal: order.total, 
-      origin,
+      baseOrigin,
       type: error.type,
       code: error.code
     });
-    // If it's a Stripe-specific URL error, provide a clearer message
+    
     if (error.message.includes("Not a valid URL")) {
-      throw new Error(`Stripe rejected the redirect URL. Ensure your SITE_URL environment variable is a full URL (e.g., https://your-site.vercel.app) with no spaces.`);
+      throw new Error(`Stripe rejected the redirect URL. Your SITE_URL might have a hidden character or invalid format. Current origin: ${baseOrigin}`);
     }
     throw error;
   }
