@@ -1192,11 +1192,24 @@ async function handlePaymentReturn() {
     }
     
     await loadSession();
+    
+    // Safety: If session didn't load, try one more time after a small delay
+    if (!currentUser) {
+      console.log("Session not found after redirect, retrying...");
+      await new Promise(r => setTimeout(r, 1000));
+      await loadSession();
+    }
+
     if (processingModal) closeModal(processingModal);
     
     if (currentUser) {
+      updateAuthUi();
       openModal(authModal);
       await loadUserOrders();
+      showToast(`Payment confirmed! Welcome back, ${currentUser.name}`);
+    } else {
+      console.warn("User still not logged in after payment return.");
+      showToast("Payment received. Please log in to see your order status.");
     }
   }
   
