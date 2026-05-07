@@ -878,15 +878,29 @@ async function loadAdmin() {
         </div>
       `;
     }).join("") || "<p>No orders yet.</p>";
-    adminDiscounts.innerHTML = payload.discountCodes.map((discount) => `
-      <article>
-        <strong>${escapeHtml(discount.code)}${discount.isGiftCard ? " - gift card" : ""}</strong>
-        <span>${discount.type} - ${discount.value}${discount.recipientEmail ? ` - ${escapeHtml(discount.recipientEmail)}` : ""}</span>
-        <button data-print-gift="${escapeHtml(discount.code)}">Print</button>
-        <button data-send-gift="${escapeHtml(discount.code)}">Send</button>
-        <button data-delete-code="${escapeHtml(discount.code)}">Delete</button>
-      </article>
-    `).join("") || "<p>No discount codes yet.</p>";
+    adminDiscounts.innerHTML = payload.discountCodes.map((discount) => {
+      const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(discount.code)}`;
+      
+      return `
+        <article class="admin-discount-card">
+          <div class="discount-info">
+            <strong>${escapeHtml(discount.code)}</strong>
+            <span class="badge ${discount.isGiftCard ? "gold" : "muted"}">${discount.isGiftCard ? "GIFT CARD" : "DISCOUNT"}</span>
+            <p>${discount.type === "fixed" ? money(discount.value) : discount.value + "%"} OFF</p>
+            ${discount.recipientEmail ? `<small>For: ${escapeHtml(discount.recipientEmail)}</small>` : ""}
+          </div>
+          <div class="discount-qr">
+            <img src="${qrUrl}" alt="QR Code" />
+            <a href="${qrUrl}&download=1" download="${discount.code}.png" class="button ghost mini">Download QR</a>
+          </div>
+          <div class="discount-actions">
+            <button class="button ghost mini" data-print-gift="${escapeHtml(discount.code)}">Print</button>
+            <button class="button ghost mini" data-send-gift="${escapeHtml(discount.code)}">Send</button>
+            <button class="button danger mini" data-delete-code="${escapeHtml(discount.code)}">Delete</button>
+          </div>
+        </article>
+      `;
+    }).join("") || "<p>No discount codes yet.</p>";
     adminProductHint.textContent = payload.printfulConnected
       ? `Printful connected. ${payload.products?.length || 0} synced product${payload.products?.length === 1 ? "" : "s"} loaded for this store.`
       : payload.productWarning || "Printful is not connected. Add PRINTFUL_TOKEN and PRINTFUL_STORE_ID in .env.";
@@ -1108,6 +1122,9 @@ adminModal.addEventListener("click", async (event) => {
         printCode.textContent = gift.code;
         printAmount.textContent = gift.type === "fixed" ? money(gift.value, payload.analytics.currency || "GBP") : `${gift.value}% OFF`;
         
+        const printQR = document.getElementById("printQR");
+        printQR.innerHTML = `<img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(gift.code)}" style="width:100%; height:auto;" />`;
+
         // Populate and print
         window.print();
       }
@@ -1413,19 +1430,39 @@ async function openScanner(target = "checkout") {
     scannerStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
     video.srcObject = scannerStream;
     
-    // Simulate auto-capture for pro feel
-    setTimeout(() => {
-      if (modal.classList.contains("open")) {
-        const mockCode = "ECI-" + Math.random().toString(36).substr(2, 4).toUpperCase();
-        if (target === "profile") {
-          document.getElementById("profileRedeemInput").value = mockCode;
-        } else {
-          checkoutForm.discountCode.value = mockCode;
+    // Real QR Scanning Logic
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    
+    const scanFrame = () => {
+      if (!modal.classList.contains("open")) return;
+      
+      if (video.readyState === video.HAVE_ENOUGH_DATA) {
+        canvas.height = video.videoHeight;
+        canvas.width = video.videoWidth;
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const code = jsQR(imageData.data, imageData.width, imageData.height, {
+          inversionAttempts: "dontInvert",
+        });
+        
+        if (code && code.data) {
+          const scannedCode = code.data.trim().toUpperCase();
+          if (target === "profile") {
+            document.getElementById("profileRedeemInput").value = scannedCode;
+          } else {
+            checkoutForm.discountCode.value = scannedCode;
+          }
+          showToast(`Code captured: ${scannedCode}`);
+          closeScanner();
+          return; // Stop scanning
         }
-        showToast("Code captured successfully!");
-        closeScanner();
       }
-    }, 3500);
+      requestAnimationFrame(scanFrame);
+    };
+    
+    requestAnimationFrame(scanFrame);
   } catch (err) {
     showToast("Camera access denied or unavailable.");
   }

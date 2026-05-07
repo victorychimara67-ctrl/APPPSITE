@@ -96,6 +96,31 @@ function normalizeSiteUrl(value) {
   return /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
 }
 
+async function loadDb() {
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseKey = process.env.SUPABASE_ANON_KEY;
+
+  if (supabaseUrl && supabaseKey) {
+    try {
+      console.log("Supabase: Fetching database state...");
+      const res = await fetch(`${supabaseUrl}/rest/v1/storage?id=eq.main&select=data`, {
+        headers: { "apikey": supabaseKey, "Authorization": `Bearer ${supabaseKey}` }
+      });
+      const items = await res.json();
+      if (items && items[0]?.data) {
+        console.log("Supabase: State loaded successfully.");
+        memoryDb = migrateDb(items[0].data);
+        return memoryDb;
+      }
+    } catch (e) {
+      console.warn("Supabase load failed, falling back to local file:", e.message);
+    }
+  }
+
+  memoryDb = loadDbFile();
+  return memoryDb;
+}
+
 function loadDbFile() {
   try {
     if (existsSync(dbPath)) return migrateDb(JSON.parse(readFileSync(dbPath, "utf8")));
@@ -109,19 +134,55 @@ function readDb() {
   return migrateDb(memoryDb);
 }
 
-function writeDb(db, options = {}) {
+async function writeDb(db, options = {}) {
   memoryDb = migrateDb(db);
-  const persist = options.persist ?? FILE_DB_WRITES;
-  if (!persist) return false;
-  try {
-    if (!existsSync(dataDir)) mkdirSync(dataDir, { recursive: true });
-    writeFileSync(dbPath, JSON.stringify(memoryDb, null, 2));
-    console.log(`Database persisted to ${dbPath} (${memoryDb.users.length} users, ${memoryDb.orders.length} orders)`);
-    return true;
-  } catch (error) {
-    console.warn(`Could not persist ${dbPath}; continuing in memory. ${error.message}`);
-    return false;
+  
+  // 1. Local Persistence
+  const persistFile = options.persist ?? FILE_DB_WRITES;
+  if (persistFile) {
+    try {
+      if (!existsSync(dataDir)) mkdirSync(dataDir, { recursive: true });
+      writeFileSync(dbPath, JSON.stringify(memoryDb, null, 2));
+    } catch (e) { console.warn("Local file save failed"); }
   }
+
+  // 2. Supabase Persistence (for Vercel)
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseKey = process.env.SUPABASE_ANON_KEY;
+  if (supabaseUrl && supabaseKey) {
+    try {
+      // Use upsert-like behavior with PATCH and a specific header
+      const res = await fetch(`${supabaseUrl}/rest/v1/storage?id=eq.main`, {
+        method: "PATCH",
+        headers: { 
+          "apikey": supabaseKey, 
+          "Authorization": `Bearer ${supabaseKey}`,
+          "Content-Type": "application/json",
+          "Prefer": "resolution=merge-duplicates,return=minimal"
+        },
+        body: JSON.stringify({ data: memoryDb, updated_at: new Date().toISOString() })
+      });
+      
+      // If PATCH fails (e.g. no row found), try an INSERT
+      if (res.status === 204 || res.status === 200) {
+        // Success
+      } else {
+        await fetch(`${supabaseUrl}/rest/v1/storage`, {
+          method: "POST",
+          headers: { 
+            "apikey": supabaseKey, 
+            "Authorization": `Bearer ${supabaseKey}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ id: "main", data: memoryDb })
+        });
+      }
+    } catch (e) {
+      console.warn("Supabase save failed:", e.message);
+    }
+  }
+
+  return true;
 }
 
 function emptyDb() {
@@ -736,7 +797,7 @@ async function routeApi(req, res, pathname) {
         ...(ADMIN_EMAILS.has(email) ? { role: "admin" } : {})
       };
       db.users.push(user);
-      const success = writeDb(db);
+      const success = await writeDb(db);
       console.log("Signup success:", { email, persisted: success, totalUsers: db.users.length });
       return json(res, 201, { user: publicUser(user) }, { "Set-Cookie": makeCookie(user) });
     }
@@ -818,7 +879,7 @@ async function routeApi(req, res, pathname) {
         createdAt: new Date().toISOString()
       };
       active.db.orders.push(localOrder);
-      writeDb(active.db);
+      await writeDb(active.db);
       return json(res, 201, { order: localOrder, checkoutUrl: session.url, sessionId: session.id });
     }
 
@@ -875,7 +936,7 @@ async function routeApi(req, res, pathname) {
               if (recovered) userOrders.push(recovered);
             }
           }
-          if (userOrders.length > 0) writeDb(active.db);
+          if (userOrders.length > 0) await writeDb(active.db);
         } catch (e) {
           console.warn("RECOVERY FAILED:", e.message);
         }
@@ -1366,13 +1427,13 @@ async function finalizePaidOrder(session, db) {
     paidAt: new Date().toISOString()
   };
   
-  writeDb(db);
+  await writeDb(db);
   console.log("Finalized Order as PAID:", order.id);
 
   // AUTOMATIC SYNC: Push to Printful
   try {
     await submitOrderToPrintful(order);
-    writeDb(db);
+    await writeDb(db);
     console.log("SUCCESS: Order pushed to Printful automatically:", order.id);
   } catch (error) {
     console.error("PRINTFUL AUTO-SYNC FAILED:", error.message);
@@ -1458,14 +1519,14 @@ async function routeAdmin(req, res, pathname) {
       message: String(body.message || "").trim(),
       createdAt: new Date().toISOString()
     });
-    writeDb(db);
+    await writeDb(db);
     return json(res, 201, { discountCodes: db.discountCodes });
   }
 
   if (req.method === "DELETE" && pathname.startsWith("/api/admin/discounts/")) {
     const code = decodeURIComponent(pathname.split("/").pop()).toUpperCase();
     db.discountCodes = db.discountCodes.filter((discount) => discount.code !== code);
-    writeDb(db);
+    await writeDb(db);
     return json(res, 200, { discountCodes: db.discountCodes });
   }
 
@@ -1474,7 +1535,7 @@ async function routeAdmin(req, res, pathname) {
     const body = await parseBody(req);
     db.productOverrides[productId] = normalizeProductOverride(body, db.productOverrides[productId]);
     productCache = { ...productCache, expiresAt: 0 };
-    writeDb(db);
+    await writeDb(db);
     const product = await getProduct(productId);
     return json(res, 200, { product, productOverrides: db.productOverrides });
   }
@@ -1482,7 +1543,7 @@ async function routeAdmin(req, res, pathname) {
   if (req.method === "POST" && pathname.startsWith("/api/admin/products/") && pathname.endsWith("/restore")) {
     const productId = decodeURIComponent(pathname.replace("/api/admin/products/", "").replace(/\/restore$/, ""));
     db.hiddenProducts = db.hiddenProducts.filter((id) => id !== productId);
-    writeDb(db);
+    await writeDb(db);
     return json(res, 200, { hiddenProducts: db.hiddenProducts });
   }
 
@@ -1490,7 +1551,7 @@ async function routeAdmin(req, res, pathname) {
     const productId = decodeURIComponent(pathname.split("/").pop());
     if (!db.hiddenProducts.includes(productId)) db.hiddenProducts.push(productId);
     productCache = { expiresAt: 0, products: null, source: "", connected: false, warning: "" };
-    writeDb(db);
+    await writeDb(db);
     return json(res, 200, { hiddenProducts: db.hiddenProducts });
   }
 
@@ -1503,7 +1564,7 @@ async function routeAdmin(req, res, pathname) {
       code: String(body.code || "").trim().toUpperCase().slice(0, 20),
       targetProductId: String(body.targetProductId || "").trim()
     };
-    writeDb(db);
+    await writeDb(db);
     return json(res, 200, { popupConfig: db.popupConfig });
   }
 
@@ -1511,7 +1572,12 @@ async function routeAdmin(req, res, pathname) {
     const status = {
       stripe: { ok: false, message: "Not configured" },
       printful: { ok: false, message: "Not configured", storeName: "" },
-      database: { ok: true, orders: db.orders.length, users: db.users.length },
+      database: { 
+        ok: true, 
+        orders: db.orders.length, 
+        users: db.users.length,
+        provider: process.env.SUPABASE_URL ? "Supabase" : "Local File"
+      },
       ready: false
     };
 
@@ -1558,7 +1624,7 @@ async function routeAdmin(req, res, pathname) {
       }
       
       await submitOrderToPrintful(order);
-      writeDb(db);
+      await writeDb(db);
       
       console.log(`ADMIN MANUAL PUSH SUCCESS: Order ${orderId} is now in Printful (ID: ${order.printfulOrder?.id})`);
       return json(res, 200, { success: true, order });
@@ -1579,7 +1645,7 @@ async function routeAdmin(req, res, pathname) {
       console.log(`ADMIN: Updated state_code for order ${orderId} to ${body.state_code}`);
     }
     
-    writeDb(db);
+    await writeDb(db);
     return json(res, 200, { success: true, order });
   }
 
@@ -1611,7 +1677,14 @@ function serveStatic(req, res, pathname) {
 
 const liveUsers = new Map();
 
+let dbInitializationPromise = null;
+async function ensureDb() {
+  if (!dbInitializationPromise) dbInitializationPromise = loadDb();
+  return dbInitializationPromise;
+}
+
 async function handleRequest(req, res) {
+  await ensureDb();
   const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
   
   // Basic Analytics & Live Users
@@ -1620,7 +1693,7 @@ async function handleRequest(req, res) {
     db.analytics.totalVisits++;
     const ref = req.headers.referer || "Direct";
     db.analytics.referrers[ref] = (db.analytics.referrers[ref] || 0) + 1;
-    writeDb(db);
+    await writeDb(db);
   }
 
   // Heartbeat for live users

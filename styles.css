@@ -2710,3 +2710,36 @@ input[type="checkbox"] {
   color: inherit;
   text-decoration: underline;
 }
+
+
+/* Admin Discount Cards */
+.admin-discount-card {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 20px;
+  align-items: center;
+  padding: 15px;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  margin-bottom: 15px;
+}
+
+.discount-info strong {
+  display: block;
+  font-size: 18px;
+  letter-spacing: 1px;
+}
+
+.discount-qr img {
+  width: 60px;
+  height: 60px;
+  border-radius: 4px;
+  border: 2px solid #fff;
+}
+
+.discount-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
