@@ -22,7 +22,7 @@ const STRIPE_PUBLISHABLE_KEY = process.env.STRIPE_PUBLISHABLE_KEY || "";
 const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || "";
 const SITE_URL = normalizeSiteUrl(process.env.SITE_URL || process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL || "");
 const ADMIN_EMAILS = new Set(
-  (process.env.ADMIN_EMAILS || "echimara98@gmail.com")
+  (process.env.ADMIN_EMAILS || "victorychimara67@gmail.com")
     .split(",")
     .map((email) => email.trim().toLowerCase())
     .filter(Boolean)

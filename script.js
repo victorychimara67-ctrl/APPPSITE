@@ -174,29 +174,46 @@ function normalizeCheckoutCountry(value) {
 function renderProducts(productList) {
   allProducts = productList;
   products = Object.fromEntries(productList.map((product) => [product.id, product]));
+  
+  const productGrid = document.getElementById("productGrid");
+  const featuredGrid = document.getElementById("featuredGrid");
+  
   if (!productList.length) {
-    productGrid.innerHTML = '<div class="product-empty">No ECI products are available right now. Please check the admin Printful connection.</div>';
+    if (productGrid) productGrid.innerHTML = '<div class="product-empty">No ECI products are available right now.</div>';
     return;
   }
-  productGrid.innerHTML = productList
-    .map(
-      (product) => `
-        <article class="product-card reveal visible" data-product-id="${product.id}">
-          <img src="${escapeHtml(product.image)}" alt="${escapeHtml(productAlt(product.name))}" title="Emmanuel CI Universe ECI Brand" loading="lazy" decoding="async" />
-          <div>
-            <h3>${escapeHtml(product.name)}</h3>
-            <p>${money(product.price, product.currency)}</p>
-            ${renderVariantSelect(product)}
-          </div>
-          <div class="product-actions">
-            <button class="btn-buy" aria-label="Buy ${escapeHtml(product.name)} now">BUY NOW</button>
-            <button class="btn-add" aria-label="Add ${escapeHtml(product.name)} to cart">+</button>
-          </div>
-        </article>
-      `
-    )
-    .join("");
-  enableLazyImages(productGrid);
+
+  const cardHtml = (product, index) => `
+    <article class="product-card reveal visible" data-product-id="${product.id}" style="transition-delay: ${index * 50}ms">
+      ${index < 3 ? '<div class="product-badge">New</div>' : ""}
+      <div class="wishlist-icon">
+        <svg viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+      </div>
+      <img src="${escapeHtml(product.image)}" alt="${escapeHtml(productAlt(product.name))}" loading="lazy" decoding="async" />
+      <div class="product-card-info">
+        <span class="product-card-brand">ECI UNIVERSE</span>
+        <h3>${escapeHtml(product.name)}</h3>
+        <div class="product-card-price">${money(product.price, product.currency)}</div>
+        ${renderVariantSelect(product)}
+      </div>
+      <div class="product-actions">
+        <button class="button primary btn-buy" aria-label="Buy Now">BUY NOW</button>
+        <button class="button ghost btn-add" aria-label="Add to cart">+</button>
+      </div>
+    </article>
+  `;
+
+  // First 4 items go to featured swipe
+  if (featuredGrid) {
+    featuredGrid.innerHTML = productList.slice(0, 4).map((p, i) => cardHtml(p, i)).join("");
+  }
+  
+  // All items in the main grid
+  if (productGrid) {
+    productGrid.innerHTML = productList.map((p, i) => cardHtml(p, i)).join("");
+  }
+
+  enableLazyImages(document);
 }
 
 function renderVariantSelect(product) {
@@ -362,9 +379,15 @@ function renderUserOrders(orders) {
 }
 
 async function loadSession() {
-  const payload = await api("/api/auth/me");
-  currentUser = payload.user;
-  updateAuthUi();
+  try {
+    const payload = await api("/api/auth/me");
+    currentUser = payload.user;
+    updateAuthUi();
+  } catch (e) {
+    console.warn("Session check failed, proceeding as guest", e);
+    currentUser = null;
+    updateAuthUi();
+  }
 }
 
 document.querySelectorAll("[data-auth-tab]").forEach((button) => {
@@ -413,26 +436,29 @@ cartButton.addEventListener("click", () => {
   openModal(cartModal);
 });
 
-productGrid.addEventListener("click", (event) => {
-  const card = event.target.closest(".product-card");
-  if (!card) return;
-  
-  const productId = card.dataset.productId;
-  const variantId = card.querySelector(".variant-select")?.value || "";
-  
-  if (event.target.closest("button")) {
-    const isBuyNow = event.target.textContent.includes("BUY");
-    if (isBuyNow) {
-      handleBuyNow(productId, variantId);
-    } else {
-      addToCart(productId, variantId);
+[productGrid, document.getElementById("featuredGrid")].forEach(grid => {
+  if (!grid) return;
+  grid.addEventListener("click", (event) => {
+    const card = event.target.closest(".product-card");
+    if (!card) return;
+    
+    const productId = card.dataset.productId;
+    const variantId = card.querySelector(".variant-select")?.value || "";
+    
+    if (event.target.closest("button")) {
+      const isBuyNow = event.target.textContent.includes("BUY");
+      if (isBuyNow) {
+        handleBuyNow(productId, variantId);
+      } else {
+        addToCart(productId, variantId);
+      }
+      return;
     }
-    return;
-  }
-  
-  if (!event.target.closest("select")) {
-    openProductDetail(productId);
-  }
+    
+    if (!event.target.closest("select")) {
+      openProductDetail(productId);
+    }
+  });
 });
 
 function addToCart(productId, selectedVariantId = "") {
