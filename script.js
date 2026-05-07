@@ -51,8 +51,22 @@ const printGiftCode = document.getElementById("printGiftCode");
 const printGiftValue = document.getElementById("printGiftValue");
 const printGiftMessage = document.getElementById("printGiftMessage");
 
+let cart = loadCart();
 let currentUser = null;
-let cart = JSON.parse(localStorage.getItem("minimal-cart") || "[]");
+let currentProduct = null;
+
+function saveCart() {
+  localStorage.setItem("eci_cart", JSON.stringify(cart));
+}
+
+function loadCart() {
+  try {
+    const saved = localStorage.getItem("eci_cart");
+    return saved ? JSON.parse(saved) : [];
+  } catch {
+    return [];
+  }
+}
 let currentDetailProduct = null;
 let detailGalleryImages = [];
 let detailGalleryIndex = 0;
@@ -100,7 +114,7 @@ function showToast(message) {
 }
 
 function persistCart() {
-  localStorage.setItem("minimal-cart", JSON.stringify(cart));
+  saveCart();
   cartCount.textContent = cart.reduce((total, item) => total + item.quantity, 0);
 }
 
@@ -174,7 +188,10 @@ function renderProducts(productList) {
             <p>${money(product.price, product.currency)}</p>
             ${renderVariantSelect(product)}
           </div>
-          <button aria-label="Add ${escapeHtml(product.name)} to cart">+</button>
+          <div class="product-actions">
+            <button class="btn-buy" aria-label="Buy ${escapeHtml(product.name)} now">BUY NOW</button>
+            <button class="btn-add" aria-label="Add ${escapeHtml(product.name)} to cart">+</button>
+          </div>
         </article>
       `
     )
@@ -218,7 +235,7 @@ function renderCart() {
   }
   checkoutForm.style.display = "grid";
   cartItems.innerHTML = cart
-    .map((item) => {
+    .map((item, index) => {
       const product = products[item.productId] || item;
       const displayName = item.name || product.name;
       const price = item.price ?? product.price;
@@ -226,16 +243,15 @@ function renderCart() {
       const image = item.image || product.image;
       const linePrice = price ? money(price * item.quantity, currency) : "Printful item";
       return `
-        <div class="cart-row" data-product-id="${item.productId}" data-variant-id="${item.printfulVariantId || ""}">
+        <div class="cart-row" data-index="${index}">
           <img src="${escapeHtml(image)}" alt="${escapeHtml(productAlt(displayName))}" loading="lazy" decoding="async" />
           <div>
             <strong>${escapeHtml(displayName)}</strong>
             <span>${money(price, currency)} - ${linePrice}</span>
           </div>
           <div class="quantity-tools">
-            <button type="button" data-qty="-1" aria-label="Decrease ${escapeHtml(displayName)}">-</button>
+            <button type="button" data-action="remove" aria-label="Remove ${escapeHtml(displayName)}">×</button>
             <span>${item.quantity}</span>
-            <button type="button" data-qty="1" aria-label="Increase ${escapeHtml(displayName)}">+</button>
           </div>
         </div>
       `;
@@ -290,11 +306,59 @@ function updateAuthUi() {
     accountName.innerHTML = `Signed in as <strong>${currentUser.name}</strong><br>${currentUser.email}`;
     checkoutForm.email.value = currentUser.email;
     checkoutForm.name.value = currentUser.name;
+    loadUserOrders();
   } else {
     document.querySelector(".auth-tabs").classList.remove("hidden");
     accountPanel.classList.add("hidden");
     loginForm.classList.remove("hidden");
   }
+}
+
+async function loadUserOrders() {
+  const userOrdersList = document.getElementById("userOrdersList");
+  if (!userOrdersList) return;
+  try {
+    const payload = await api("/api/orders");
+    renderUserOrders(payload.orders);
+  } catch (error) {
+    console.warn("Failed to load user orders", error);
+  }
+}
+
+function renderUserOrders(orders) {
+  const userOrdersList = document.getElementById("userOrdersList");
+  if (!userOrdersList) return;
+  if (!orders || !orders.length) {
+    userOrdersList.innerHTML = '<p class="empty-orders">No orders found.</p>';
+    return;
+  }
+  userOrdersList.innerHTML = orders.map(order => `
+    <div class="user-order-card">
+      <div class="user-order-header">
+        <strong>Order #${order.id.slice(-6).toUpperCase()}</strong>
+        <span class="user-order-status status-${order.status}">${order.status.replace(/_/g, " ")}</span>
+      </div>
+      <div class="user-order-details">
+        <div class="user-order-items">
+          ${order.items.map(item => `
+            <div class="order-item-mini">
+              <span>${item.quantity}x ${escapeHtml(item.name)}</span>
+              <span>${money(item.price * item.quantity, order.currency)}</span>
+            </div>
+          `).join("")}
+        </div>
+        <div class="order-footer-mini">
+          <strong>Total: ${money(order.total, order.currency)}</strong>
+          <small>${new Date(order.createdAt).toLocaleDateString()}</small>
+        </div>
+        ${order.tracking ? `
+          <a href="${order.tracking.url}" target="_blank" class="tracking-link">
+            Track with ${order.tracking.carrier}: ${order.tracking.number}
+          </a>
+        ` : order.status === "shipped" ? '<p class="tracking-link">Tracking info coming soon...</p>' : ""}
+      </div>
+    </div>
+  `).join("");
 }
 
 async function loadSession() {
@@ -330,6 +394,12 @@ document.querySelectorAll("[data-close]").forEach((button) => {
   });
 });
 
+adminButton.addEventListener("click", () => {
+  loadAdminData();
+  openModal(adminModal);
+  startAdminPolling();
+});
+
 profileButton.addEventListener("click", () => openModal(authModal));
 cartButton.addEventListener("click", () => {
   renderCart();
@@ -339,35 +409,54 @@ cartButton.addEventListener("click", () => {
 productGrid.addEventListener("click", (event) => {
   const card = event.target.closest(".product-card");
   if (!card) return;
-  if (!event.target.closest("button") && !event.target.closest("select")) {
-    openProductDetail(card.dataset.productId);
+  
+  const productId = card.dataset.productId;
+  const variantId = card.querySelector(".variant-select")?.value || "";
+  
+  if (event.target.closest("button")) {
+    const isBuyNow = event.target.textContent.includes("BUY");
+    if (isBuyNow) {
+      handleBuyNow(productId, variantId);
+    } else {
+      addToCart(productId, variantId);
+    }
     return;
   }
-  const button = event.target.closest(".product-card button");
-  if (!button) return;
-  const productId = card.dataset.productId;
-  addToCart(productId, card.querySelector(".variant-select")?.value || "");
+  
+  if (!event.target.closest("select")) {
+    openProductDetail(productId);
+  }
 });
 
 function addToCart(productId, selectedVariantId = "") {
   const product = products[productId];
-  const variantId = selectedVariantId || product?.printfulVariantId || "";
-  const selectedVariant = product?.variants?.find((variant) => variant.id === variantId);
+  if (!product) return;
+  
+  const variantId = selectedVariantId || product.printfulVariantId || "";
+  const selectedVariant = product.variants?.find((variant) => variant.id === variantId);
+  
   const existing = cart.find((item) => item.productId === productId && item.printfulVariantId === variantId);
-  if (existing) existing.quantity += 1;
-  else {
+  if (existing) {
+    existing.quantity += 1;
+  } else {
     cart.push({
       productId,
       quantity: 1,
       printfulVariantId: variantId,
-      name: selectedVariant?.name || product?.name || "Product",
-      price: selectedVariant?.price ?? product?.price ?? null,
-      currency: selectedVariant?.currency || product?.currency || "USD",
-      image: selectedVariant?.image || product?.image || "assets/reference-showroom.png"
+      name: selectedVariant?.name || product.name || "Product",
+      price: selectedVariant?.price ?? product.price ?? null,
+      currency: selectedVariant?.currency || product.currency || "USD",
+      image: selectedVariant?.image || product.image || "assets/product-hoodie.png"
     });
   }
-  persistCart();
-  showToast(`${product?.name || "Product"} added to cart`);
+  renderCart();
+  showToast(`${selectedVariant?.name || product.name} added to cart`);
+}
+
+async function handleBuyNow(productId, variantId = "") {
+  addToCart(productId, variantId);
+  renderCart();
+  openModal(cartModal);
 }
 
 async function openProductDetail(productId, pushUrl = true) {
@@ -453,6 +542,15 @@ detailAddButton.addEventListener("click", () => {
   closeModal(productModal);
 });
 
+const detailBuyButton = document.getElementById("detailBuyButton");
+if (detailBuyButton) {
+  detailBuyButton.addEventListener("click", () => {
+    if (!currentDetailProduct) return;
+    handleBuyNow(currentDetailProduct.id, detailVariant.value || currentDetailProduct.printfulVariantId);
+    closeModal(productModal);
+  });
+}
+
 detailSpinButton.addEventListener("click", () => {
   detailViewer.classList.toggle("spinning");
 });
@@ -487,15 +585,11 @@ searchResults.addEventListener("click", (event) => {
 });
 
 cartItems.addEventListener("click", (event) => {
-  const button = event.target.closest("[data-qty]");
+  const button = event.target.closest("[data-action='remove']");
   if (!button) return;
   const row = button.closest(".cart-row");
-  const productId = row.dataset.productId;
-  const variantId = row.dataset.variantId;
-  const item = cart.find((entry) => entry.productId === productId && (entry.printfulVariantId || "") === variantId);
-  if (!item) return;
-  item.quantity += Number(button.dataset.qty);
-  cart = cart.filter((entry) => entry.quantity > 0);
+  const index = Number(row.dataset.index);
+  cart.splice(index, 1);
   renderCart();
 });
 
@@ -635,6 +729,36 @@ async function loadAdmin() {
       <div><strong>${payload.analytics.products}</strong><span>Live Products</span></div>
       <div><strong>${money(payload.analytics.revenue, currency)}</strong><span>Earnings</span></div>
     `;
+
+    const adminAnalytics = document.getElementById("adminAnalytics");
+    if (adminAnalytics) {
+      adminAnalytics.innerHTML = `
+        <div class="live-badge"><strong>${payload.analytics.liveUsers}</strong> Live Browsing</div>
+        <p>Total Site Visits: <strong>${payload.analytics.totalVisits}</strong></p>
+      `;
+    }
+
+    const adminReferrers = document.getElementById("adminReferrers");
+    if (adminReferrers) {
+      const refs = Object.entries(payload.analytics.referrers || {})
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5);
+      adminReferrers.innerHTML = refs.map(([name, count]) => `
+        <div class="referrer-row">
+          <span>${escapeHtml(name)}</span>
+          <strong>${count}</strong>
+        </div>
+      `).join("") || "<p>No traffic data yet.</p>";
+    }
+
+    const popupForm = document.getElementById("adminPopupForm");
+    if (popupForm && payload.popupConfig) {
+      popupForm.enabled.checked = payload.popupConfig.enabled;
+      popupForm.title.value = payload.popupConfig.title;
+      popupForm.text.value = payload.popupConfig.text;
+      popupForm.code.value = payload.popupConfig.code;
+      popupForm.targetProductId.value = payload.popupConfig.targetProductId;
+    }
     adminUsers.innerHTML = payload.users.map((user) => `<article><strong>${escapeHtml(user.name)}</strong><span>${escapeHtml(user.email)} - ${user.orderCount} orders${user.isAdmin ? " - admin" : ""}</span></article>`).join("") || "<p>No users yet.</p>";
     adminOrders.innerHTML = payload.orders.map((order) => `<article><strong>${escapeHtml(order.status)}</strong><span>${escapeHtml(order.recipient?.email || "")} - ${money(order.total || 0, order.currency || currency)}</span></article>`).join("") || "<p>No orders yet.</p>";
     adminDiscounts.innerHTML = payload.discountCodes.map((discount) => `
@@ -726,6 +850,22 @@ discountForm.addEventListener("submit", async (event) => {
     showToast(error.message);
   }
 });
+
+const adminPopupForm = document.getElementById("adminPopupForm");
+if (adminPopupForm) {
+  adminPopupForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    try {
+      const data = Object.fromEntries(new FormData(adminPopupForm));
+      data.enabled = adminPopupForm.enabled.checked;
+      await api("/api/admin/popup-config", { method: "POST", body: JSON.stringify(data) });
+      showToast("Popup configuration updated");
+      await loadAdmin();
+    } catch (error) {
+      showToast(error.message);
+    }
+  });
+}
 
 syncPrintfulButton?.addEventListener("click", async () => {
   syncPrintfulButton.disabled = true;
@@ -994,7 +1134,59 @@ setNavState();
 persistCart();
 handlePaymentReturn();
 enableLazyImages(document);
-loadSession().catch(() => {});
+let adminPollInterval = null;
+function startAdminPolling() {
+  if (adminPollInterval) clearInterval(adminPollInterval);
+  adminPollInterval = setInterval(loadAdminData, 30000); // 30 seconds
+}
+
+// Dynamic Pop-up Logic
+async function initPopup() {
+  try {
+    const payload = await api("/api/products"); // Get general info which includes config fallback? No, let's use auth/me or a new endpoint.
+    // Actually, let's just fetch admin overview if admin, but for normal users we need the config.
+    // I'll add the config to the /api/products response in server.js.
+    const config = payload.popupConfig;
+    if (!config || !config.enabled || localStorage.getItem("eci_discount_shown")) return;
+
+    setTimeout(() => {
+      const popup = document.getElementById("discountPopupModal");
+      if (!popup) return;
+      
+      popup.querySelector("h2").textContent = config.title;
+      popup.querySelector("p").innerHTML = config.text;
+      popup.querySelector(".discount-display span").textContent = config.code;
+      
+      const popupBtn = popup.querySelector(".popup-actions button");
+      if (config.targetProductId) {
+        popupBtn.textContent = "Claim Offer & Shop";
+        popupBtn.addEventListener("click", () => {
+          handleBuyNow(config.targetProductId);
+          closeModal(popup);
+        });
+      }
+
+      openModal(popup);
+      localStorage.setItem("eci_discount_shown", "true");
+    }, 5000);
+  } catch (e) {
+    console.warn("Popup init failed", e);
+  }
+}
+initPopup();
+
+const copyDiscountBtn = document.getElementById("copyDiscountBtn");
+if (copyDiscountBtn) {
+  copyDiscountBtn.addEventListener("click", () => {
+    navigator.clipboard.writeText("ECI10").then(() => {
+      copyDiscountBtn.textContent = "Copied!";
+      setTimeout(() => copyDiscountBtn.textContent = "Copy", 2000);
+      showToast("Discount code copied to clipboard");
+    });
+  });
+}
+
+loadSession();
 loadProducts();
 setupReveals(liteMotion);
 setupParallax(liteMotion);

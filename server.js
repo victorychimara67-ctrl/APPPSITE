@@ -111,7 +111,25 @@ function writeDb(db, options = {}) {
 }
 
 function emptyDb() {
-  return { users: [], sessions: [], orders: [], hiddenProducts: [], discountCodes: [], productOverrides: {} };
+  return { 
+    users: [], 
+    sessions: [], 
+    orders: [], 
+    hiddenProducts: [], 
+    discountCodes: [], 
+    productOverrides: {},
+    popupConfig: {
+      enabled: true,
+      title: "Join the Universe",
+      text: "Take 10% OFF your first custom piece.",
+      code: "ECI10",
+      targetProductId: ""
+    },
+    analytics: {
+      totalVisits: 0,
+      referrers: {}
+    }
+  };
 }
 
 function migrateDb(db) {
@@ -121,6 +139,8 @@ function migrateDb(db) {
   db.hiddenProducts ||= [];
   db.discountCodes ||= [];
   db.productOverrides ||= {};
+  db.popupConfig ||= { enabled: true, title: "Join the Universe", text: "Take 10% OFF your first custom piece.", code: "ECI10", targetProductId: "" };
+  db.analytics ||= { totalVisits: 0, referrers: {} };
   db.users.forEach((user) => {
     if (ADMIN_EMAILS.has(String(user.email || "").toLowerCase())) user.role = "admin";
   });
@@ -711,7 +731,9 @@ async function routeApi(req, res, pathname) {
     }
 
     if (req.method === "GET" && pathname === "/api/products") {
-      return json(res, 200, await getProducts());
+      const db = readDb();
+      const products = await getProducts();
+      return json(res, 200, { ...products, popupConfig: db.popupConfig });
     }
 
     if (req.method === "GET" && pathname.startsWith("/api/products/")) {
@@ -762,8 +784,12 @@ async function routeApi(req, res, pathname) {
     if (req.method === "GET" && pathname === "/api/orders") {
       const active = requireUser(req, res);
       if (!active) return;
-      const orders = active.db.orders.filter((order) => order.userId === active.user.id).reverse();
-      return json(res, 200, { orders });
+      
+      // Sync recent orders for the user
+      const userOrders = active.db.orders.filter((order) => order.userId === active.user.id);
+      await Promise.all(userOrders.slice(-5).map(order => syncOrderWithPrintful(order)));
+      
+      return json(res, 200, { orders: userOrders.slice().reverse() });
     }
 
     if (pathname.startsWith("/api/admin/")) {
@@ -1089,6 +1115,35 @@ function formatOrderNotes(order) {
   return notes.join("\n");
 }
 
+async function syncOrderWithPrintful(order) {
+  if (!PRINTFUL_TOKEN || !order.printfulOrder?.id) return order;
+  try {
+    const payload = await printful(`/orders/${order.printfulOrder.id}`);
+    const result = payload.result;
+    if (result) {
+      order.printfulOrder = result;
+      if (result.status === "fulfilled" || result.status === "shipped") {
+        order.status = "shipped";
+      } else if (result.status === "failed" || result.status === "canceled") {
+        order.status = "problem";
+      }
+      // Extract tracking if available
+      const shipment = result.shipments?.[0];
+      if (shipment) {
+        order.tracking = {
+          number: shipment.tracking_number,
+          url: shipment.tracking_url,
+          carrier: shipment.carrier,
+          shippedAt: shipment.ship_date
+        };
+      }
+    }
+  } catch (error) {
+    console.warn(`Could not sync order ${order.id} with Printful: ${error.message}`);
+  }
+  return order;
+}
+
 async function handleStripeEvent(event) {
   if (!["checkout.session.completed", "checkout.session.async_payment_succeeded"].includes(event.type)) return;
   const session = event.data?.object || {};
@@ -1122,6 +1177,11 @@ async function routeAdmin(req, res, pathname) {
       ...publicUser(user),
       orderCount: db.orders.filter((order) => order.userId === user.id).length
     }));
+    
+    // Sync all pending/recent orders for the admin
+    const recentOrders = db.orders.filter(o => o.status !== "shipped" && o.status !== "cancelled").slice(-20);
+    await Promise.all(recentOrders.map(order => syncOrderWithPrintful(order)));
+    
     const orders = db.orders.slice().reverse();
     const revenue = db.orders.reduce((sum, order) => sum + Number(order.total || 0), 0);
     const products = await getProducts();
@@ -1131,13 +1191,17 @@ async function routeAdmin(req, res, pathname) {
         orders: db.orders.length,
         products: products.products.length,
         revenue,
-        currency: db.orders.find((order) => order.currency)?.currency || "GBP"
+        currency: db.orders.find((order) => order.currency)?.currency || "GBP",
+        totalVisits: db.analytics.totalVisits,
+        referrers: db.analytics.referrers,
+        liveUsers: liveUsers.size
       },
       users,
       orders,
       discountCodes: db.discountCodes,
       hiddenProducts: db.hiddenProducts,
       productOverrides: db.productOverrides,
+      popupConfig: db.popupConfig,
       productSource: products.source,
       productWarning: products.warning || "",
       printfulConnected: Boolean(products.connected),
@@ -1204,6 +1268,19 @@ async function routeAdmin(req, res, pathname) {
     return json(res, 200, { hiddenProducts: db.hiddenProducts });
   }
 
+  if (req.method === "POST" && pathname === "/api/admin/popup-config") {
+    const body = await parseBody(req);
+    db.popupConfig = {
+      enabled: Boolean(body.enabled),
+      title: String(body.title || "").trim().slice(0, 100),
+      text: String(body.text || "").trim().slice(0, 200),
+      code: String(body.code || "").trim().toUpperCase().slice(0, 20),
+      targetProductId: String(body.targetProductId || "").trim()
+    };
+    writeDb(db);
+    return json(res, 200, { popupConfig: db.popupConfig });
+  }
+
   return json(res, 404, { error: "Admin route not found." });
 }
 
@@ -1230,8 +1307,29 @@ function serveStatic(req, res, pathname) {
   createReadStream(filePath).pipe(res);
 }
 
+const liveUsers = new Map();
+
 async function handleRequest(req, res) {
   const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
+  
+  // Basic Analytics & Live Users
+  if (!url.pathname.startsWith("/api/")) {
+    const db = readDb();
+    db.analytics.totalVisits++;
+    const ref = req.headers.referer || "Direct";
+    db.analytics.referrers[ref] = (db.analytics.referrers[ref] || 0) + 1;
+    writeDb(db);
+  }
+
+  // Heartbeat for live users
+  const sessionToken = getCookie(req, "session") || req.socket.remoteAddress;
+  liveUsers.set(sessionToken, Date.now());
+  
+  // Cleanup old heartbeats
+  for (const [token, time] of liveUsers.entries()) {
+    if (Date.now() - time > 60000) liveUsers.delete(token);
+  }
+
   if (url.pathname.startsWith("/api/")) {
     await routeApi(req, res, url.pathname);
     return;

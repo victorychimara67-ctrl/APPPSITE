@@ -226,6 +226,12 @@
         </form>
         <div class="account-panel hidden" id="accountPanel">
           <p id="accountName"></p>
+          <div class="order-tracking-section">
+            <h3>My Orders</h3>
+            <div id="userOrdersList" class="user-orders-list">
+              <p class="empty-orders">No orders found.</p>
+            </div>
+          </div>
           <button class="button ghost" id="logoutButton" type="button">Logout</button>
         </div>
       </div>
@@ -276,9 +282,14 @@
             <h2 id="detailTitle"></h2>
             <p id="detailPrice"></p>
             <p id="detailDescription"></p>
+            <div class="product-policy">
+              <strong>Return Policy</strong>
+              <p>All ECI pieces are custom-ordered. No returns or exchanges.</p>
+            </div>
             <label>Variant<select id="detailVariant"></select></label>
             <div class="detail-actions">
-              <button class="button primary" id="detailAddButton" type="button">Add To Cart</button>
+              <button class="button primary" id="detailBuyButton" type="button">BUY NOW</button>
+              <button class="button ghost" id="detailAddButton" type="button">Add To Cart</button>
               <button class="button ghost" id="detailSpinButton" type="button">3D View</button>
               <a class="button ghost hidden" id="detailModelLink" target="_blank" rel="noopener">Open 3D Mockup</a>
             </div>
@@ -293,6 +304,29 @@
         <div class="modal-kicker">ECI Admin</div>
         <h2 id="adminTitle">Command center</h2>
         <div class="admin-stats" id="adminStats"></div>
+        
+        <div class="admin-analytics-grid">
+          <section class="admin-analytics-card">
+            <h3>Site Analytics</h3>
+            <div id="adminAnalytics"></div>
+          </section>
+          <section class="admin-analytics-card">
+            <h3>Top Referrers</h3>
+            <div id="adminReferrers" class="admin-list"></div>
+          </section>
+        </div>
+
+        <section class="admin-popup-manager">
+          <h3>Popup Manager</h3>
+          <form id="adminPopupForm" class="admin-popup-form">
+            <label>Enable Pop-up <input type="checkbox" name="enabled" /></label>
+            <label>Title <input name="title" required /></label>
+            <label>Subtext <input name="text" required /></label>
+            <label>Discount Code <input name="code" required /></label>
+            <label>Target Product ID (Auto-Add) <input name="targetProductId" placeholder="e.g. hoodie" /></label>
+            <button class="button primary" type="submit">Update Popup</button>
+          </form>
+        </section>
         <form class="discount-form" id="discountForm">
           <label>Code<input name="code" placeholder="ECI10" required /></label>
           <label>Type<select name="type"><option value="percent">Percent</option><option value="fixed">Fixed</option></select></label>
@@ -348,5 +382,20 @@
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
     <script src="script.js" defer></script>
+    <div class="modal discount-popup-modal" id="discountPopupModal" aria-hidden="true">
+      <div class="modal-panel discount-popup-panel" role="dialog" aria-modal="true">
+        <button class="modal-close" data-close="discountPopupModal" aria-label="Close">x</button>
+        <div class="modal-kicker">Member Exclusive</div>
+        <h2>Join the Universe</h2>
+        <p>Take <strong>10% OFF</strong> your first custom piece from the 2026 collection.</p>
+        <div class="discount-display">
+          <span>ECI10</span>
+          <button id="copyDiscountBtn" type="button">Copy</button>
+        </div>
+        <div class="popup-actions">
+          <button class="button primary" data-close="discountPopupModal">Shop Collection</button>
+        </div>
+      </div>
+    </div>
   </body>
 </html>
