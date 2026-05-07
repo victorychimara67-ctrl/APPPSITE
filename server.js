@@ -896,7 +896,8 @@ function normalizeItems(raw = []) {
         printfulVariantId: String(item.printfulVariantId || "").trim(),
         name: String(item.name || item.productId || "Product").trim(),
         price: Number(item.price || 0),
-        currency: String(item.currency || "USD").trim().toUpperCase()
+        currency: String(item.currency || "USD").trim().toUpperCase(),
+        customImages: Array.isArray(item.customImages) ? item.customImages : []
       };
     })
     .filter(Boolean)
@@ -1168,7 +1169,21 @@ async function submitOrderToPrintful(order) {
       throw new Error(`Variant ID missing for "${item.name}". Please ensure this product is synced in Printful and has a matching name.`);
     }
     
-    return { sync_variant_id: Number(syncVariantId), quantity: item.quantity };
+    const files = [];
+    // If there are custom images (from the 3D builder or upload), send them to Printful
+    if (Array.isArray(item.customImages) && item.customImages.length > 0) {
+      item.customImages.forEach(imgUrl => {
+        if (imgUrl.startsWith("http")) {
+          files.push({ type: "default", url: imgUrl });
+        }
+      });
+    }
+
+    return { 
+      sync_variant_id: Number(syncVariantId), 
+      quantity: item.quantity,
+      files: files.length > 0 ? files : undefined
+    };
   }));
 
   const payload = await printful(`/orders${query}`, {
