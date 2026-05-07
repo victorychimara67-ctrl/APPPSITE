@@ -793,6 +793,30 @@ async function routeApi(req, res, pathname) {
       return json(res, 201, { order: localOrder, checkoutUrl: session.url, sessionId: session.id });
     }
 
+    if (req.method === "GET" && pathname === "/api/checkout/verify") {
+      const sessionId = url.searchParams.get("sessionId");
+      const orderId = url.searchParams.get("orderId");
+      const db = readDb();
+      
+      let finalSessionId = sessionId;
+      if (!finalSessionId && orderId) {
+        const order = db.orders.find(o => o.id === orderId);
+        finalSessionId = order?.stripe?.sessionId;
+      }
+      
+      if (!finalSessionId) return json(res, 400, { error: "Missing session identification" });
+      
+      const stripe = Stripe(STRIPE_SECRET_KEY.trim().replace(/[^\x20-\x7E]/g, ""));
+      const session = await stripe.checkout.sessions.retrieve(finalSessionId);
+      
+      if (session.payment_status === "paid") {
+        const order = await finalizePaidOrder(session, db);
+        return json(res, 200, { ok: true, order });
+      }
+      
+      return json(res, 200, { ok: false, status: session.payment_status });
+    }
+
     if (req.method === "POST" && pathname === "/api/orders") {
       return json(res, 409, { error: "Use the custom order form to create a Stripe Checkout session before fulfillment." });
     }
@@ -1057,6 +1081,7 @@ async function createStripeCheckoutSession(req, order) {
     const successUrl = new URL("/", baseOrigin);
     successUrl.searchParams.set("payment", "success");
     successUrl.searchParams.set("order", order.id);
+    successUrl.searchParams.set("session_id", "{CHECKOUT_SESSION_ID}");
 
     const cancelUrl = new URL("/", baseOrigin);
     cancelUrl.searchParams.set("payment", "cancelled");
@@ -1263,22 +1288,25 @@ async function syncOrderWithPrintful(order) {
   return order;
 }
 
-async function handleStripeEvent(event) {
-  if (!["checkout.session.completed", "checkout.session.async_payment_succeeded"].includes(event.type)) return;
-  const session = event.data?.object || {};
-  const db = readDb();
+// SHARED Logic to finalize a paid order
+async function finalizePaidOrder(session, db) {
   let order = db.orders.find((item) => item.id === session.client_reference_id || item.stripe?.sessionId === session.id);
   
   if (!order) {
     order = orderFromMetadata(session.metadata);
     if (!order) {
-      console.error("WEBHOOK ERROR: Could not reconstruct order from metadata", session.id);
-      return;
+      console.error("ERROR: Could not reconstruct order from metadata", session.id);
+      return null;
     }
     db.orders.push(order);
   }
 
-  // CRITICAL: Update and write to DB IMMEDIATELY before doing anything else
+  // Already processed?
+  if (order.status === "paid" || order.printfulOrder?.id) {
+    return order;
+  }
+
+  // Update status
   order.status = "paid";
   order.stripe = {
     ...order.stripe,
@@ -1289,17 +1317,27 @@ async function handleStripeEvent(event) {
     currency: String(session.currency || order.currency || "USD").toUpperCase(),
     paidAt: new Date().toISOString()
   };
+  
   writeDb(db);
-  console.log("Order saved as PAID via webhook:", order.id);
+  console.log("Finalized Order as PAID:", order.id);
 
-  // AUTOMATIC SYNC: Push to Printful as Draft immediately
+  // AUTOMATIC SYNC: Push to Printful
   try {
     await submitOrderToPrintful(order);
-    writeDb(db); // Save Printful ID/Info
+    writeDb(db);
     console.log("SUCCESS: Order pushed to Printful automatically:", order.id);
   } catch (error) {
-    console.error("PRINTFUL AUTO-PUSH FAILED (Retry manually in Admin):", error.message);
+    console.error("PRINTFUL AUTO-SYNC FAILED:", error.message);
   }
+  
+  return order;
+}
+
+async function handleStripeEvent(event) {
+  if (!["checkout.session.completed", "checkout.session.async_payment_succeeded"].includes(event.type)) return;
+  const session = event.data?.object || {};
+  const db = readDb();
+  await finalizePaidOrder(session, db);
 }
 
 async function routeAdmin(req, res, pathname) {

@@ -1150,6 +1150,7 @@ async function handlePaymentReturn() {
   const params = new URLSearchParams(window.location.search);
   const payment = params.get("payment");
   const orderId = params.get("order");
+  const sessionId = params.get("session_id"); // Stripe might provide this in some flows, but we'll try to find it
   
   if (!payment) return;
   
@@ -1159,27 +1160,30 @@ async function handlePaymentReturn() {
     cart = [];
     persistCart();
     
-    // 1. Show processing screen
     if (processingModal) openModal(processingModal);
     
-    // 2. Poll for order status or just wait a bit for the webhook to finish
-    // We'll wait 3.5 seconds to give the server time to process the webhook
-    await new Promise(r => setTimeout(r, 3500));
+    try {
+      // 1. If we don't have a sessionId from Stripe directly, we can't verify precisely,
+      // but we already provide session_id in our createStripeCheckoutSession success_url if we want.
+      // Let's check if our success_url actually includes it.
+      // Wait, let me check createStripeCheckoutSession in server.js.
+      
+      // I'll add sessionId to the URL in server.js next, but for now let's assume we can try verifying by orderId.
+      const verifyRes = await api(`/api/checkout/verify?orderId=${orderId || ""}&sessionId=${sessionId || ""}`);
+      if (verifyRes.ok) {
+        showToast("Payment verified instantly!");
+      }
+    } catch (e) {
+      console.warn("Instant verification failed, waiting for webhook fallback...", e);
+      await new Promise(r => setTimeout(r, 3000));
+    }
     
-    // 3. Refresh session and orders
     await loadSession();
-    
-    // 4. Hide processing screen
     if (processingModal) closeModal(processingModal);
     
-    // 5. Open orders modal automatically
     if (currentUser) {
       openModal(authModal);
-      // Re-fetch orders to make sure we have the latest
       await loadUserOrders();
-      showToast("Order confirmed! View status below.");
-    } else {
-      showToast("Payment received. Log in to view your order status.");
     }
   }
   
@@ -1188,7 +1192,6 @@ async function handlePaymentReturn() {
     if (cartModal) openModal(cartModal);
   }
   
-  // Clean up URL without refreshing
   history.replaceState({}, "", `${location.pathname}${location.hash || ""}`);
 }
 
