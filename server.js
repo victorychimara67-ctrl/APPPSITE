@@ -60,13 +60,25 @@ function loadEnv() {
     const line = row.trim();
     if (!line || line.startsWith("#") || !line.includes("=")) continue;
     const [key, ...parts] = line.split("=");
-    const cleanKey = key.replace(/^\uFEFF/, "");
-    if (!process.env[cleanKey]) process.env[cleanKey] = parts.join("=").trim();
+    const cleanKey = key.replace(/^\uFEFF/, "").trim();
+    if (!process.env[cleanKey]) {
+      // Strip quotes if present
+      let value = parts.join("=").trim();
+      if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+        value = value.slice(1, -1);
+      }
+      process.env[cleanKey] = value;
+    }
   }
 }
 
 function normalizeSiteUrl(value) {
-  const raw = String(value || "").trim().replace(/\/+$/, "");
+  let raw = String(value || "").trim();
+  // Strip quotes
+  if ((raw.startsWith('"') && raw.endsWith('"')) || (raw.startsWith("'") && raw.endsWith("'"))) {
+    raw = raw.slice(1, -1);
+  }
+  raw = raw.trim().replace(/\/+$/, "");
   if (!raw) return "";
   return /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
 }
@@ -857,7 +869,7 @@ function stripeAmount(value) {
 }
 
 function getRequestOrigin(req) {
-  if (SITE_URL) return SITE_URL;
+  if (SITE_URL && SITE_URL.startsWith("http")) return SITE_URL;
   const proto = req.headers["x-forwarded-proto"] || "http";
   const host = req.headers["x-forwarded-host"] || req.headers.host || `localhost:${PORT}`;
   return `${proto}://${host}`.replace(/\/+$/, "");
@@ -935,12 +947,16 @@ async function createStripeCheckoutSession(req, order) {
 
   // Get base origin and clean it
   let baseOrigin = (SITE_URL || getRequestOrigin(req)).trim();
+  
+  // Ensure we have a valid absolute URL
   if (!baseOrigin.startsWith("http")) {
-    baseOrigin = `https://${baseOrigin}`;
+    baseOrigin = `https://${baseOrigin.replace(/^\/+/, "")}`;
   }
 
   try {
-    // Use the URL class for bulletproof URL construction
+    // Log the exact origin being used to help debugging
+    console.log("Using origin for Stripe redirect:", baseOrigin);
+
     const successUrl = new URL("/", baseOrigin);
     successUrl.searchParams.set("payment", "success");
     successUrl.searchParams.set("order", order.id);
