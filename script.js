@@ -336,7 +336,7 @@ function renderUserOrders(orders) {
     <div class="user-order-card">
       <div class="user-order-header">
         <strong>Order #${order.id.slice(-6).toUpperCase()}</strong>
-        <span class="user-order-status status-${order.status}">${order.status.replace(/_/g, " ")}</span>
+        <span class="user-order-status status-${order.status}">${order.statusLabel || order.status.replace(/_/g, " ")}</span>
       </div>
       <div class="user-order-details">
         <div class="user-order-items">
@@ -817,7 +817,7 @@ async function loadAdmin() {
     }
 
     adminUsers.innerHTML = payload.users.map((user) => `<article><strong>${escapeHtml(user.name)}</strong><span>${escapeHtml(user.email)} - ${user.orderCount} orders${user.isAdmin ? " - admin" : ""}</span></article>`).join("") || "<p>No users yet.</p>";
-    adminOrders.innerHTML = payload.orders.map((order) => `<article><strong>${escapeHtml(order.status)}</strong><span>${escapeHtml(order.recipient?.email || "")} - ${money(order.total || 0, order.currency || currency)}</span></article>`).join("") || "<p>No orders yet.</p>";
+    adminOrders.innerHTML = payload.orders.map((order) => `<article><strong>${escapeHtml(order.statusLabel || order.status)}</strong><span>${escapeHtml(order.recipient?.email || "")} - ${money(order.total || 0, order.currency || currency)}</span></article>`).join("") || "<p>No orders yet.</p>";
     adminDiscounts.innerHTML = payload.discountCodes.map((discount) => `
       <article>
         <strong>${escapeHtml(discount.code)}${discount.isGiftCard ? " - gift card" : ""}</strong>

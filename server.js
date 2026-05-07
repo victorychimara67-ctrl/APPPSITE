@@ -28,6 +28,19 @@ const ADMIN_EMAILS = new Set(
     .filter(Boolean)
 );
 
+function mapOrderStatus(status, isAdmin) {
+  const s = String(status || "pending").toLowerCase();
+  if (!isAdmin) {
+    if (s === "pending" || s === "pending_payment") return "Awaiting Payment";
+    if (s === "paid") return "Order Confirmed";
+    if (s === "draft" || s.includes("printful")) return "In Preparation";
+    if (s === "shipped") return "Dispatched";
+    if (s === "problem") return "Action Required";
+    return s.charAt(0).toUpperCase() + s.slice(1).replace(/_/g, " ");
+  }
+  return s.toUpperCase().replace(/_/g, " ");
+}
+
 const localProducts = [
   { id: "hoodie", name: "ECI Essential Hoodie", price: 89.99, image: "assets/product-hoodie.png", printfulVariantId: process.env.PRINTFUL_VARIANT_hoodie || "" },
   { id: "tee", name: "ECI Minimal Tee", price: 49.99, image: "assets/product-tee.png", printfulVariantId: process.env.PRINTFUL_VARIANT_tee || "" },
@@ -791,7 +804,12 @@ async function routeApi(req, res, pathname) {
       const userOrders = active.db.orders.filter((order) => order.userId === active.user.id);
       await Promise.all(userOrders.slice(-5).map(order => syncOrderWithPrintful(order)));
       
-      return json(res, 200, { orders: userOrders.slice().reverse() });
+      const orders = userOrders.slice().reverse().map(order => ({
+        ...order,
+        statusLabel: mapOrderStatus(order.status, false)
+      }));
+      
+      return json(res, 200, { orders });
     }
 
     if (req.method === "POST" && pathname === "/api/contact") {
@@ -1202,7 +1220,11 @@ async function routeAdmin(req, res, pathname) {
     const recentOrders = db.orders.filter(o => o.status !== "shipped" && o.status !== "cancelled").slice(-20);
     await Promise.all(recentOrders.map(order => syncOrderWithPrintful(order)));
     
-    const orders = db.orders.slice().reverse();
+    const orders = db.orders.slice().reverse().map(order => ({
+      ...order,
+      statusLabel: mapOrderStatus(order.status, true)
+    }));
+    
     const revenue = db.orders.reduce((sum, order) => sum + Number(order.total || 0), 0);
     const products = await getProducts();
     return json(res, 200, {
