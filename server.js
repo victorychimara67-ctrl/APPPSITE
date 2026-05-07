@@ -1568,6 +1568,21 @@ async function routeAdmin(req, res, pathname) {
     }
   }
   
+  if (req.method === "POST" && pathname.startsWith("/api/admin/orders/") && pathname.endsWith("/update-recipient")) {
+    const orderId = pathname.replace("/api/admin/orders/", "").replace("/update-recipient", "");
+    const order = db.orders.find(o => o.id === orderId);
+    if (!order) return json(res, 404, { error: "Order not found" });
+    
+    const body = await parseBody(req);
+    if (body.state_code !== undefined) {
+      order.recipient.state_code = body.state_code;
+      console.log(`ADMIN: Updated state_code for order ${orderId} to ${body.state_code}`);
+    }
+    
+    writeDb(db);
+    return json(res, 200, { success: true, order });
+  }
+
   return json(res, 404, { error: "Admin route not found" });
 }
 

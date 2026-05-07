@@ -266,6 +266,8 @@
             <label>Gift Card / Discount<div class="redeem-group"><input name="discountCode" placeholder="ECI-XXXX" /><button type="button" class="scan-btn" onclick="openScanner()">Scan</button></div></label>
             <label>Address<input name="address1" required /></label>
             <label>City<input name="city" required /></label>
+            <label>Country Code (e.g. US, GB)<input name="country_code" required maxlength="2" placeholder="US" /></label>
+            <label>State/Region Code (e.g. NY, CA)<input name="state_code" placeholder="NY (required for US/CA/AU)" /></label>
             <label>Postal Code<input name="zip" required /></label>
           </div>
           <div id="checkoutSummary" class="checkout-summary"></div>

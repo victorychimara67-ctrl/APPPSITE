@@ -867,6 +867,7 @@ async function loadAdmin() {
           <div class="admin-order-actions">
             ${!order.printfulOrder?.id ? `
               <button class="button primary mini" data-push-printful="${order.id}">PUSH TO PRINTFUL</button>
+              <button class="button ghost mini" data-edit-order-recipient="${order.id}">EDIT INFO</button>
             ` : `
               <div class="status-badge synced">
                 <i></i>
@@ -1152,6 +1153,23 @@ adminModal.addEventListener("click", async (event) => {
         showToast("Push failed: " + e.message);
         pushButton.disabled = false;
         pushButton.textContent = "Push to Printful";
+      }
+    }
+    const editRecipientButton = event.target.closest("[data-edit-order-recipient]");
+    if (editRecipientButton) {
+      const orderId = editRecipientButton.dataset.editOrderRecipient;
+      const newState = prompt("Enter the 2-letter State/Region code (e.g., NY, CA, ON):");
+      if (newState) {
+        try {
+          await api(`/api/admin/orders/${orderId}/update-recipient`, { 
+            method: "POST", 
+            body: JSON.stringify({ state_code: newState.trim().toUpperCase() }) 
+          });
+          showToast("Order info updated. You can now push to Printful.");
+          await loadAdmin();
+        } catch (e) {
+          showToast("Update failed: " + e.message);
+        }
       }
     }
   } catch (error) {
