@@ -327,17 +327,28 @@
           </section>
         </div>
 
-        <section class="admin-popup-manager">
-          <h3>Popup Manager</h3>
-          <form id="adminPopupForm" class="admin-popup-form">
-            <label>Enable Pop-up <input type="checkbox" name="enabled" /></label>
-            <label>Title <input name="title" required /></label>
-            <label>Subtext <input name="text" required /></label>
-            <label>Discount Code <input name="code" required /></label>
-            <label>Target Product ID (Auto-Add) <input name="targetProductId" placeholder="e.g. hoodie" /></label>
-            <button class="button primary" type="submit">Update Popup</button>
-          </form>
-        </section>
+          <section class="admin-section">
+            <h3>ANNOUNCEMENT TICKER</h3>
+            <form id="adminTickerForm" class="admin-form">
+              <input type="text" name="ticker" placeholder="Scrolling text (e.g. Free Shipping)..." class="input" />
+              <button type="submit" class="button primary">Update Ticker</button>
+            </form>
+          </section>
+
+          <section class="admin-section">
+            <h3>GLOBAL POPUP</h3>
+            <form id="adminPopupForm" class="admin-form">
+              <label class="checkbox-container">
+                <input type="checkbox" name="enabled" />
+                <span>Enable Popup</span>
+              </label>
+              <input type="text" name="title" placeholder="Title" class="input" />
+              <textarea name="text" placeholder="Message" class="input"></textarea>
+              <input type="text" name="code" placeholder="Discount Code (Optional)" class="input" />
+              <input type="text" name="targetEmails" placeholder="Target User Emails (comma separated, leave empty for all)" class="input" />
+              <button type="submit" class="button primary">Save Popup Config</button>
+            </form>
+          </section>
 
         <section class="admin-messages-manager">
           <h3>Inbound Messages</h3>
@@ -452,7 +463,7 @@
 
     <div id="printSection">
       <div class="print-card">
-        <div class="print-logo">EMMANUEL CI UNIVERSE</div>
+        <div class="print-logo"><img src="assets/logo.png" style="height:40px; filter:brightness(0) invert(1);" /></div>
         <div class="print-fold"></div>
         <p>A GIFT FROM THE UNIVERSE</p>
         <div class="print-amount" id="printAmount">20% OFF</div>

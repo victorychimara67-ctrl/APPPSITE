@@ -2743,3 +2743,60 @@ input[type="checkbox"] {
   flex-direction: column;
   gap: 5px;
 }
+
+
+/* Announcement Ticker */
+.ticker-wrap {
+  width: 100%;
+  overflow: hidden;
+  background: #000;
+  border-bottom: 1px solid var(--line);
+  padding: 8px 0;
+  position: relative;
+  z-index: 1001;
+}
+
+.ticker {
+  display: inline-block;
+  white-space: nowrap;
+  padding-left: 100%;
+  animation: ticker 30s linear infinite;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: #fff;
+}
+
+@keyframes ticker {
+  0% { transform: translate3d(0, 0, 0); }
+  100% { transform: translate3d(-100%, 0, 0); }
+}
+
+/* Black Luxury Gift Card */
+.print-card {
+  background: #000 !important;
+  color: #fff !important;
+  border: 1px solid rgba(255,255,255,0.2) !important;
+  position: relative;
+  overflow: hidden;
+}
+
+.print-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: linear-gradient(45deg, transparent, rgba(255,255,255,0.05), transparent);
+  pointer-events: none;
+}
+
+.print-logo {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 800;
+  letter-spacing: 4px;
+}
+
+.print-code {
+  background: rgba(255,255,255,0.1) !important;
+  color: #fff !important;
+  border: 1px solid rgba(255,255,255,0.3) !important;
+}

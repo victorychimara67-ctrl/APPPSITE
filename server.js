@@ -47,7 +47,8 @@ const localProducts = [
   { id: "jacket", name: "ECI Puffer Jacket", price: 129.99, image: "assets/product-jacket.png", printfulVariantId: process.env.PRINTFUL_VARIANT_jacket || "" },
   { id: "cap", name: "ECI Minimal Cap", price: 29.99, image: "assets/product-cap.png", printfulVariantId: process.env.PRINTFUL_VARIANT_cap || "" },
   { id: "pants", name: "ECI Cargo Pants", price: 79.99, image: "assets/product-pants.png", printfulVariantId: process.env.PRINTFUL_VARIANT_pants || "" },
-  { id: "sneakers", name: "ECI Core Sneakers", price: 119.99, image: "assets/product-sneakers.png", printfulVariantId: process.env.PRINTFUL_VARIANT_sneakers || "" }
+  { id: "sneakers", name: "ECI Core Sneakers", price: 119.99, image: "assets/product-sneakers.png", printfulVariantId: process.env.PRINTFUL_VARIANT_sneakers || "" },
+  { id: "gift-card", name: "ECI Digital Gift Card", price: 20.00, image: "assets/logo.png", description: "The ultimate gift for the ECI Universe. Redeemable for any product site-wide." }
 ];
 
 let productCache = { expiresAt: 0, products: null, source: "", connected: false, warning: "" };
@@ -102,19 +103,32 @@ async function loadDb() {
 
   if (supabaseUrl && supabaseKey) {
     try {
-      console.log("Supabase: Fetching database state...");
+      console.log(`Supabase Debug: Attempting fetch from ${supabaseUrl}/rest/v1/storage...`);
       const res = await fetch(`${supabaseUrl}/rest/v1/storage?id=eq.main&select=data`, {
         headers: { "apikey": supabaseKey, "Authorization": `Bearer ${supabaseKey}` }
       });
+      
+      if (!res.ok) {
+        const errText = await res.text();
+        console.error(`Supabase ERROR [${res.status}]:`, errText);
+        throw new Error(`HTTP ${res.status}: ${errText}`);
+      }
+
       const items = await res.json();
+      console.log(`Supabase Debug: Received ${items.length} items.`);
+      
       if (items && items[0]?.data) {
-        console.log("Supabase: State loaded successfully.");
+        console.log("Supabase Success: State loaded from cloud.");
         memoryDb = migrateDb(items[0].data);
         return memoryDb;
+      } else {
+        console.warn("Supabase Warning: No row found with id='main'. Make sure you ran the SQL script.");
       }
     } catch (e) {
-      console.warn("Supabase load failed, falling back to local file:", e.message);
+      console.error("Supabase CRITICAL FAILURE:", e.message);
     }
+  } else {
+    console.warn("Supabase Config: Missing URL or Key. Using local storage.");
   }
 
   memoryDb = loadDbFile();
@@ -163,10 +177,13 @@ async function writeDb(db, options = {}) {
         body: JSON.stringify({ data: memoryDb, updated_at: new Date().toISOString() })
       });
       
+      console.log(`Supabase Save: PATCH status ${res.status}`);
+      
       // If PATCH fails (e.g. no row found), try an INSERT
       if (res.status === 204 || res.status === 200) {
-        // Success
+        console.log("Supabase Success: Cloud state updated.");
       } else {
+        console.warn(`Supabase PATCH failed (${res.status}), trying POST/Insert...`);
         await fetch(`${supabaseUrl}/rest/v1/storage`, {
           method: "POST",
           headers: { 
@@ -199,8 +216,9 @@ function emptyDb() {
       title: "Join the Universe",
       text: "Take 10% OFF your first custom piece.",
       code: "ECI10",
-      targetProductId: ""
+      targetEmails: []
     },
+    ticker: "Free UK Shipping on all orders over £100",
     analytics: {
       totalVisits: 0,
       referrers: {}
@@ -209,6 +227,7 @@ function emptyDb() {
 }
 
 function migrateDb(db) {
+  if (!db) return emptyDb();
   db.users ||= [];
   db.sessions ||= [];
   db.orders ||= [];
@@ -216,11 +235,19 @@ function migrateDb(db) {
   db.discountCodes ||= [];
   db.productOverrides ||= {};
   db.messages ||= [];
-  db.popupConfig ||= { enabled: true, title: "Join the Universe", text: "Take 10% OFF your first custom piece.", code: "ECI10", targetProductId: "" };
+  db.popupConfig ||= { enabled: true, title: "Join the Universe", text: "Take 10% OFF your first custom piece.", code: "ECI10", targetEmails: [] };
+  db.ticker ??= "Free UK Shipping on all orders over £100";
   db.analytics ||= { totalVisits: 0, referrers: {} };
-  db.users.forEach((user) => {
-    if (ADMIN_EMAILS.has(String(user.email || "").toLowerCase())) user.role = "admin";
-  });
+  
+  // Enforce Admin Roles from Environment
+  if (Array.isArray(db.users)) {
+    db.users.forEach((user) => {
+      if (user.email && ADMIN_EMAILS.has(user.email.toLowerCase())) {
+        user.role = "admin";
+      }
+    });
+  }
+  
   return db;
 }
 
@@ -802,24 +829,55 @@ async function routeApi(req, res, pathname) {
       return json(res, 201, { user: publicUser(user) }, { "Set-Cookie": makeCookie(user) });
     }
 
+    // GIFT CARD MANAGEMENT FOR USERS
+    if (req.method === "GET" && pathname === "/api/user/gift-cards") {
+      const active = requireUser(req, res);
+      if (!active) return;
+      const cards = active.db.discountCodes
+        .filter(c => c.isGiftCard && c.recipientEmail === active.user.email)
+        .map(c => ({
+          code: c.code,
+          balance: c.balance ?? c.value,
+          originalValue: c.value,
+          usage: c.usage || [],
+          createdAt: c.createdAt
+        }));
+      return json(res, 200, { cards });
+    }
+
+    if (req.method === "POST" && pathname === "/api/user/gift-cards/rotate") {
+      const active = requireUser(req, res);
+      if (!active) return;
+      const body = await parseBody(req);
+      const oldCode = String(body.code || "").trim().toUpperCase();
+      const card = active.db.discountCodes.find(c => c.code === oldCode && c.recipientEmail === active.user.email);
+      
+      if (!card) return json(res, 404, { error: "Gift card not found." });
+      
+      const newCode = `ECI-ROT-${Math.random().toString(36).substr(2, 4).toUpperCase()}-${Math.random().toString(36).substr(2, 4).toUpperCase()}`;
+      card.code = newCode;
+      await writeDb(active.db);
+      return json(res, 200, { success: true, newCode });
+    }
+
     if (req.method === "POST" && pathname === "/api/auth/login") {
       const body = await parseBody(req);
       const email = String(body.email || "").trim().toLowerCase();
       const password = String(body.password || "");
       const db = readDb();
       
-      console.log("Login attempt:", { email, usersCount: db.users.length });
+      console.log("Login attempt:", { email, usersInDb: db.users.length });
       
       const user = db.users.find((item) => item.email === email);
       
       if (!user) {
-        console.warn("Login failed: user not found in DB", { email, availableEmails: db.users.map(u => u.email) });
+        console.warn("Login failed: User not found", email);
         return json(res, 401, { error: "Email or password is incorrect." });
       }
       
       const passwordValid = verifyPassword(password, user.passwordHash);
       if (!passwordValid) {
-        console.warn("Login failed: password hash mismatch for", email);
+        console.warn("Login failed: Password mismatch for", email);
         return json(res, 401, { error: "Email or password is incorrect." });
       }
       
@@ -1020,12 +1078,32 @@ function applyDiscount(items, code, db) {
   const subtotal = items.reduce((sum, item) => sum + (Number(item.price || 0) * item.quantity), 0);
   const currency = items.find((item) => item.currency)?.currency || "USD";
   const match = db.discountCodes.find((discount) => discount.code.toLowerCase() === code.toLowerCase() && discount.active !== false);
+  
   if (!match || !subtotal) {
     return { code: "", type: "", value: 0, subtotal, discountAmount: 0, total: subtotal, currency };
   }
-  const rawAmount = match.type === "fixed" ? Number(match.value) : subtotal * (Number(match.value) / 100);
+
+  // Use balance if it's a gift card, otherwise use the fixed value/percentage
+  const availableValue = match.isGiftCard ? (match.balance ?? match.value) : match.value;
+  
+  if (match.isGiftCard && availableValue <= 0) {
+    return { code: "", type: "", value: 0, subtotal, discountAmount: 0, total: subtotal, currency, error: "Gift card balance is 0." };
+  }
+
+  const rawAmount = match.type === "fixed" ? Number(availableValue) : subtotal * (Number(availableValue) / 100);
   const discountAmount = Math.max(0, Math.min(subtotal, rawAmount));
-  return { code: match.code, type: match.type, value: match.value, subtotal, discountAmount, total: subtotal - discountAmount, currency };
+  
+  return { 
+    code: match.code, 
+    type: match.type, 
+    value: match.value, 
+    subtotal, 
+    discountAmount, 
+    total: subtotal - discountAmount, 
+    currency,
+    isGiftCard: !!match.isGiftCard,
+    balanceRemaining: match.isGiftCard ? (availableValue - discountAmount) : undefined
+  };
 }
 
 function normalizeItems(raw = []) {
@@ -1427,16 +1505,54 @@ async function finalizePaidOrder(session, db) {
     paidAt: new Date().toISOString()
   };
   
+  // GIFT CARD GENERATION LOGIC
+  for (const item of order.items) {
+    if (item.productId === "gift-card") {
+      const code = `ECI-${Math.random().toString(36).substr(2, 4).toUpperCase()}-${Math.random().toString(36).substr(2, 4).toUpperCase()}`;
+      db.discountCodes.push({
+        code,
+        type: "fixed",
+        value: item.price,
+        active: true,
+        isGiftCard: true,
+        recipientEmail: order.recipient?.email || "",
+        balance: item.price, // New field for tracking
+        usage: [], // Analytics tracking
+        createdAt: new Date().toISOString()
+      });
+      console.log(`Generated Gift Card ${code} for ${order.recipient?.email}`);
+    }
+  }
+
+  // DEDUCT FROM GIFT CARD BALANCE
+  if (order.discount && order.discount.code) {
+    const giftCard = db.discountCodes.find(c => c.code.toLowerCase() === order.discount.code.toLowerCase() && c.isGiftCard);
+    if (giftCard) {
+      const usedAmount = order.discount.discountAmount;
+      giftCard.balance = Math.max(0, (giftCard.balance ?? giftCard.value) - usedAmount);
+      giftCard.usage = giftCard.usage || [];
+      giftCard.usage.push({
+        orderId: order.id,
+        amount: usedAmount,
+        date: new Date().toISOString()
+      });
+      console.log(`Deducted ${usedAmount} from Gift Card ${giftCard.code}. New balance: ${giftCard.balance}`);
+    }
+  }
+
   await writeDb(db);
   console.log("Finalized Order as PAID:", order.id);
 
-  // AUTOMATIC SYNC: Push to Printful
-  try {
-    await submitOrderToPrintful(order);
-    await writeDb(db);
-    console.log("SUCCESS: Order pushed to Printful automatically:", order.id);
-  } catch (error) {
-    console.error("PRINTFUL AUTO-SYNC FAILED:", error.message);
+  // AUTOMATIC SYNC: Push to Printful (only for physical goods)
+  const hasPhysicalGoods = order.items.some(i => i.productId !== "gift-card");
+  if (hasPhysicalGoods) {
+    try {
+      await submitOrderToPrintful(order);
+      await writeDb(db);
+      console.log("SUCCESS: Order pushed to Printful automatically:", order.id);
+    } catch (error) {
+      console.error("PRINTFUL AUTO-SYNC FAILED:", error.message);
+    }
   }
   
   return order;
@@ -1562,10 +1678,17 @@ async function routeAdmin(req, res, pathname) {
       title: String(body.title || "").trim().slice(0, 100),
       text: String(body.text || "").trim().slice(0, 200),
       code: String(body.code || "").trim().toUpperCase().slice(0, 20),
-      targetProductId: String(body.targetProductId || "").trim()
+      targetEmails: Array.isArray(body.targetEmails) ? body.targetEmails.map(e => e.trim().toLowerCase()).filter(Boolean) : []
     };
     await writeDb(db);
     return json(res, 200, { popupConfig: db.popupConfig });
+  }
+
+  if (req.method === "POST" && pathname === "/api/admin/ticker") {
+    const body = await parseBody(req);
+    db.ticker = String(body.ticker || "").trim().slice(0, 500);
+    await writeDb(db);
+    return json(res, 200, { ticker: db.ticker });
   }
 
   if (req.method === "GET" && pathname === "/api/admin/diagnostics") {
@@ -1576,7 +1699,8 @@ async function routeAdmin(req, res, pathname) {
         ok: true, 
         orders: db.orders.length, 
         users: db.users.length,
-        provider: process.env.SUPABASE_URL ? "Supabase" : "Local File"
+        provider: process.env.SUPABASE_URL ? "Supabase" : "Local File",
+        supabaseStatus: "Checked"
       },
       ready: false
     };
@@ -1605,7 +1729,26 @@ async function routeAdmin(req, res, pathname) {
       }
     }
 
-    status.ready = status.stripe.ok && status.printful.ok;
+    if (process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY) {
+      try {
+        const res = await fetch(`${process.env.SUPABASE_URL}/rest/v1/storage?id=eq.main&select=id`, {
+          headers: { "apikey": process.env.SUPABASE_ANON_KEY, "Authorization": `Bearer ${process.env.SUPABASE_ANON_KEY}` }
+        });
+        if (res.ok) {
+          const rows = await res.json();
+          status.database.supabaseStatus = rows.length > 0 ? "Connected & Row Found" : "Connected but Row Missing (id=main)";
+          status.database.ok = rows.length > 0;
+        } else {
+          status.database.supabaseStatus = `Error: ${res.status}`;
+          status.database.ok = false;
+        }
+      } catch (e) {
+        status.database.supabaseStatus = `Connection Failed: ${e.message}`;
+        status.database.ok = false;
+      }
+    }
+
+    status.ready = status.stripe.ok && status.printful.ok && status.database.ok;
     return json(res, 200, status);
   }
 

@@ -210,7 +210,29 @@ function renderVariantSelect(product) {
 async function loadProducts() {
   try {
     const payload = await api("/api/products");
-    renderProducts(payload.products);
+    allProducts = payload.products;
+    
+    // TICKER UPDATE
+    const tickerContent = document.getElementById("ticker-content");
+    if (tickerContent && payload.ticker) {
+      tickerContent.textContent = payload.ticker;
+    }
+
+    // TARGETED POPUP LOGIC
+    if (payload.popupConfig && payload.popupConfig.enabled) {
+      const isTargeted = payload.popupConfig.targetEmails && payload.popupConfig.targetEmails.length > 0;
+      const shouldShow = !isTargeted || (currentUser && payload.popupConfig.targetEmails.includes(currentUser.email));
+      
+      if (shouldShow) {
+        setTimeout(() => {
+          if (!localStorage.getItem("popup_dismissed_" + payload.popupConfig.code)) {
+            openPopup(payload.popupConfig);
+          }
+        }, 3000);
+      }
+    }
+
+    renderProducts(allProducts);
     const productPath = location.pathname.match(/^\/product\/(.+)$/);
     if (productPath) openProductDetail(decodeURIComponent(productPath[1]), false);
   } catch (error) {
@@ -359,6 +381,45 @@ function renderUserOrders(orders) {
       ` : ""}
     </div>
   `).join("");
+
+  // ADD GIFT CARDS SECTION
+  try {
+    const giftRes = await api("/api/user/gift-cards");
+    if (giftRes.cards && giftRes.cards.length > 0) {
+      userOrdersList.innerHTML += `
+        <div class="gift-cards-section" style="margin-top: 30px; border-top: 1px solid var(--line); padding-top: 20px;">
+          <h3 style="margin-bottom: 15px;">MY GIFT CARDS</h3>
+          ${giftRes.cards.map(card => `
+            <div class="user-order-card gift-card-item">
+              <div class="order-header">
+                <span class="order-id">${escapeHtml(card.code)}</span>
+                <span class="badge gold">BALANCE: ${money(card.balance)}</span>
+              </div>
+              <div class="order-items">
+                <div class="order-item"><small>Original Value: ${money(card.originalValue)}</small></div>
+                ${card.usage.length > 0 ? `
+                  <details style="margin-top: 10px;">
+                    <summary style="font-size: 11px; cursor: pointer;">Usage History (${card.usage.length})</summary>
+                    <div style="padding: 10px 0;">
+                      ${card.usage.map(u => `
+                        <div class="order-item" style="font-size: 11px;">
+                          <span>${new Date(u.date).toLocaleDateString()}</span>
+                          <span>-${money(u.amount)}</span>
+                        </div>
+                      `).join("")}
+                    </div>
+                  </details>
+                ` : ""}
+              </div>
+              <div style="margin-top: 15px; display: flex; gap: 10px;">
+                <button class="button ghost mini" style="flex:1;" data-rotate-card="${escapeHtml(card.code)}">Rotate Code</button>
+              </div>
+            </div>
+          `).join("")}
+        </div>
+      `;
+    }
+  } catch (e) { console.warn("Failed to load user gift cards", e); }
 }
 
 async function loadSession() {
@@ -806,13 +867,18 @@ async function loadAdmin() {
       `).join("") || "<p>No traffic data yet.</p>";
     }
 
+    const tickerForm = document.getElementById("adminTickerForm");
+    if (tickerForm && payload.ticker !== undefined) {
+      tickerForm.ticker.value = payload.ticker;
+    }
+
     const popupForm = document.getElementById("adminPopupForm");
     if (popupForm && payload.popupConfig) {
       popupForm.enabled.checked = payload.popupConfig.enabled;
       popupForm.title.value = payload.popupConfig.title;
       popupForm.text.value = payload.popupConfig.text;
       popupForm.code.value = payload.popupConfig.code;
-      popupForm.targetProductId.value = payload.popupConfig.targetProductId;
+      popupForm.targetEmails.value = (payload.popupConfig.targetEmails || []).join(", ");
     }
 
     const adminMessages = document.getElementById("adminMessages");
@@ -989,9 +1055,26 @@ if (adminPopupForm) {
     try {
       const data = Object.fromEntries(new FormData(adminPopupForm));
       data.enabled = adminPopupForm.enabled.checked;
+      data.targetEmails = data.targetEmails.split(",").map(e => e.trim()).filter(Boolean);
       await api("/api/admin/popup-config", { method: "POST", body: JSON.stringify(data) });
       showToast("Popup configuration updated");
       await loadAdmin();
+    } catch (error) {
+      showToast(error.message);
+    }
+  });
+}
+
+const adminTickerForm = document.getElementById("adminTickerForm");
+if (adminTickerForm) {
+  adminTickerForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    try {
+      const data = Object.fromEntries(new FormData(adminTickerForm));
+      await api("/api/admin/ticker", { method: "POST", body: JSON.stringify(data) });
+      showToast("Ticker updated successfully");
+      await loadAdmin();
+      await loadProducts(); // Refresh live site ticker
     } catch (error) {
       showToast(error.message);
     }
@@ -1114,20 +1197,41 @@ adminModal.addEventListener("click", async (event) => {
       const payload = await api("/api/admin/overview");
       const gift = payload.discountCodes.find((discount) => discount.code === code);
       if (!gift) return;
-      if (printButton) {
-        const printSection = document.getElementById("printSection");
-        const printAmount = document.getElementById("printAmount");
-        const printCode = document.getElementById("printCode");
-        
-        printCode.textContent = gift.code;
-        printAmount.textContent = gift.type === "fixed" ? money(gift.value, payload.analytics.currency || "GBP") : `${gift.value}% OFF`;
-        
-        const printQR = document.getElementById("printQR");
-        printQR.innerHTML = `<img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(gift.code)}" style="width:100%; height:auto;" />`;
+    if (printButton) {
+      const printSection = document.getElementById("printSection");
+      const printAmount = document.getElementById("printAmount");
+      const printCode = document.getElementById("printCode");
+      
+      printCode.textContent = gift.code;
+      printAmount.textContent = gift.type === "fixed" ? money(gift.value, payload.analytics.currency || "GBP") : `${gift.value}% OFF`;
+      
+      const printQR = document.getElementById("printQR");
+      printQR.innerHTML = `<img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(gift.code)}" style="width:100%; height:auto;" />`;
 
-        // Populate and print
+      // MOBILE PRINT FIX
+      if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+        const printWindow = window.open("", "_blank");
+        printWindow.document.write(`
+          <html>
+            <head>
+              <title>Print Gift Card</title>
+              <style>
+                body { background: #000; color: #fff; font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+                ${Array.from(document.styleSheets[0].cssRules).map(r => r.cssText).join("\n")}
+                #printSection { display: block !important; position: static; }
+              </style>
+            </head>
+            <body>
+              ${printSection.innerHTML}
+              <script>setTimeout(() => { window.print(); window.close(); }, 500);</script>
+            </body>
+          </html>
+        `);
+        printWindow.document.close();
+      } else {
         window.print();
       }
+    }
       if (sendButton) {
         const subject = encodeURIComponent(`Your ECI UNIVERSE Gift Card`);
         const body = encodeURIComponent(`Hello! You've received a gift card from Emmanuel CI Universe.\n\nCode: ${gift.code}\nValue: ${gift.type === "fixed" ? money(gift.value, payload.analytics.currency || "GBP") : `${gift.value}% OFF`}\n\nRedeem it at: ${location.origin}`);
@@ -1280,7 +1384,9 @@ function setupReveals(liteMotion) {
 }
 
 function setupParallax(liteMotion) {
-  if (!stage || liteMotion || !window.matchMedia("(pointer: fine)").matches) return;
+  // Mobile Check: Disable on phones/tablets for smoothness as requested
+  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  if (!stage || liteMotion || isMobile || !window.matchMedia("(pointer: fine)").matches) return;
   let ticking = false;
   window.addEventListener(
     "pointermove",
