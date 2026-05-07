@@ -401,6 +401,13 @@ adminButton.addEventListener("click", () => {
 });
 
 profileButton.addEventListener("click", () => openModal(authModal));
+const contactLink = document.getElementById("contactLink");
+if (contactLink) {
+  contactLink.addEventListener("click", (e) => {
+    e.preventDefault();
+    openModal(document.getElementById("contactModal"));
+  });
+}
 cartButton.addEventListener("click", () => {
   renderCart();
   openModal(cartModal);
@@ -611,6 +618,31 @@ loginForm.addEventListener("submit", async (event) => {
   }
 });
 
+  }
+});
+
+const contactForm = document.getElementById("contactForm");
+if (contactForm) {
+  contactForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const submitBtn = contactForm.querySelector('button[type="submit"]');
+    try {
+      submitBtn.disabled = true;
+      submitBtn.textContent = "Sending...";
+      const data = Object.fromEntries(new FormData(contactForm));
+      await api("/api/contact", { method: "POST", body: JSON.stringify(data) });
+      showToast("Message sent to the Universe");
+      contactForm.reset();
+      closeModal(document.getElementById("contactModal"));
+    } catch (error) {
+      showToast(error.message);
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = "Send Message";
+    }
+  });
+}
+
 signupForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   try {
@@ -759,6 +791,25 @@ async function loadAdmin() {
       popupForm.code.value = payload.popupConfig.code;
       popupForm.targetProductId.value = payload.popupConfig.targetProductId;
     }
+
+    const adminMessages = document.getElementById("adminMessages");
+    if (adminMessages) {
+      adminMessages.innerHTML = payload.messages.map(msg => `
+        <article class="admin-message-card">
+          <div class="admin-message-header">
+            <strong>${escapeHtml(msg.name)}</strong>
+            <span>${new Date(msg.createdAt).toLocaleString()}</span>
+          </div>
+          <h4>${escapeHtml(msg.subject)}</h4>
+          <p>${escapeHtml(msg.text)}</p>
+          <div class="admin-message-actions">
+            <a href="mailto:${encodeURIComponent(msg.email)}?subject=${encodeURIComponent("Re: " + msg.subject)}&body=${encodeURIComponent("\n\n--- Original Message from " + msg.name + " ---\n" + msg.text)}" class="button primary">Reply via Gmail</a>
+            <small>${escapeHtml(msg.email)}</small>
+          </div>
+        </article>
+      `).join("") || "<p>No messages yet.</p>";
+    }
+
     adminUsers.innerHTML = payload.users.map((user) => `<article><strong>${escapeHtml(user.name)}</strong><span>${escapeHtml(user.email)} - ${user.orderCount} orders${user.isAdmin ? " - admin" : ""}</span></article>`).join("") || "<p>No users yet.</p>";
     adminOrders.innerHTML = payload.orders.map((order) => `<article><strong>${escapeHtml(order.status)}</strong><span>${escapeHtml(order.recipient?.email || "")} - ${money(order.total || 0, order.currency || currency)}</span></article>`).join("") || "<p>No orders yet.</p>";
     adminDiscounts.innerHTML = payload.discountCodes.map((discount) => `

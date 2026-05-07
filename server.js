@@ -118,6 +118,7 @@ function emptyDb() {
     hiddenProducts: [], 
     discountCodes: [], 
     productOverrides: {},
+    messages: [],
     popupConfig: {
       enabled: true,
       title: "Join the Universe",
@@ -139,6 +140,7 @@ function migrateDb(db) {
   db.hiddenProducts ||= [];
   db.discountCodes ||= [];
   db.productOverrides ||= {};
+  db.messages ||= [];
   db.popupConfig ||= { enabled: true, title: "Join the Universe", text: "Take 10% OFF your first custom piece.", code: "ECI10", targetProductId: "" };
   db.analytics ||= { totalVisits: 0, referrers: {} };
   db.users.forEach((user) => {
@@ -792,6 +794,24 @@ async function routeApi(req, res, pathname) {
       return json(res, 200, { orders: userOrders.slice().reverse() });
     }
 
+    if (req.method === "POST" && pathname === "/api/contact") {
+      const body = await parseBody(req);
+      const db = readDb();
+      const message = {
+        id: crypto.randomUUID(),
+        name: String(body.name || "Anonymous").trim(),
+        email: String(body.email || "").trim(),
+        subject: String(body.subject || "No Subject").trim(),
+        text: String(body.message || "").trim(),
+        createdAt: new Date().toISOString(),
+        read: false
+      };
+      if (!message.email || !message.text) return json(res, 400, { error: "Email and message are required." });
+      db.messages.push(message);
+      writeDb(db);
+      return json(res, 201, { success: true });
+    }
+
     if (pathname.startsWith("/api/admin/")) {
       return await routeAdmin(req, res, pathname);
     }
@@ -1202,6 +1222,7 @@ async function routeAdmin(req, res, pathname) {
       hiddenProducts: db.hiddenProducts,
       productOverrides: db.productOverrides,
       popupConfig: db.popupConfig,
+      messages: db.messages.slice().reverse(),
       productSource: products.source,
       productWarning: products.warning || "",
       printfulConnected: Boolean(products.connected),

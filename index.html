@@ -94,6 +94,7 @@
         <a href="#shop">Shop</a>
         <a href="#collections">Collections</a>
         <a href="#about">About</a>
+        <a href="#contact" id="contactLink">Contact</a>
       </nav>
       <div class="nav-actions" aria-label="Store tools">
         <button class="icon-button" id="searchButton" aria-label="Search">
@@ -327,6 +328,11 @@
             <button class="button primary" type="submit">Update Popup</button>
           </form>
         </section>
+
+        <section class="admin-messages-manager">
+          <h3>Inbound Messages</h3>
+          <div id="adminMessages" class="admin-list"></div>
+        </section>
         <form class="discount-form" id="discountForm">
           <label>Code<input name="code" placeholder="ECI10" required /></label>
           <label>Type<select name="type"><option value="percent">Percent</option><option value="fixed">Fixed</option></select></label>
@@ -395,6 +401,22 @@
         <div class="popup-actions">
           <button class="button primary" data-close="discountPopupModal">Shop Collection</button>
         </div>
+      </div>
+    </div>
+
+    <div class="modal contact-modal" id="contactModal" aria-hidden="true">
+      <div class="modal-panel contact-panel" role="dialog" aria-modal="true">
+        <button class="modal-close" data-close="contactModal" aria-label="Close">x</button>
+        <div class="modal-kicker">Get in Touch</div>
+        <h2>Message the Universe</h2>
+        <p>Send your inquiries, design requests, or questions directly to the ECI team.</p>
+        <form id="contactForm" class="contact-form">
+          <label>Full Name <input name="name" placeholder="John Doe" required /></label>
+          <label>Email Address <input name="email" type="email" placeholder="john@example.com" required /></label>
+          <label>Subject <input name="subject" placeholder="Custom Order Inquiry" required /></label>
+          <label>Message <textarea name="message" rows="5" placeholder="Tell us more..." required></textarea></label>
+          <button class="button primary" type="submit">Send Message</button>
+        </form>
       </div>
     </div>
   </body>
