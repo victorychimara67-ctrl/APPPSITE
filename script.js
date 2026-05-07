@@ -172,6 +172,10 @@ function normalizeCheckoutCountry(value) {
 }
 
 function renderProducts(productList) {
+  if (!Array.isArray(productList)) {
+    console.error("renderProducts: Expected array, got", typeof productList);
+    productList = [];
+  }
   allProducts = productList;
   products = Object.fromEntries(productList.map((product) => [product.id, product]));
   if (!productList.length) {
@@ -1361,26 +1365,22 @@ async function handlePaymentReturn() {
 }
 
 function setupReveals(liteMotion) {
+  const currentReveals = document.querySelectorAll(".reveal");
   if (!("IntersectionObserver" in window) || liteMotion) {
-    reveals.forEach((item) => item.classList.add("visible"));
+    currentReveals.forEach((item) => item.classList.add("visible"));
     return;
   }
-  const revealObserver = new IntersectionObserver(
+  const observer = new IntersectionObserver(
     (entries) => {
       entries.forEach((entry) => {
         if (entry.isIntersecting) {
           entry.target.classList.add("visible");
-          revealObserver.unobserve(entry.target);
         }
       });
     },
-    { threshold: 0.14 }
+    { threshold: 0.05, rootMargin: "0px 0px -50px 0px" }
   );
-
-  reveals.forEach((item, index) => {
-    item.style.transitionDelay = `${Math.min(index * 55, 220)}ms`;
-    revealObserver.observe(item);
-  });
+  currentReveals.forEach((item) => observer.observe(item));
 }
 
 function setupParallax(liteMotion) {
@@ -1518,11 +1518,21 @@ if (copyDiscountBtn) {
   });
 }
 
-loadSession();
-loadProducts();
-setupReveals(liteMotion);
-setupParallax(liteMotion);
-setupIntro(liteMotion);
+async function initApp() {
+  try {
+    await loadSession();
+  } catch (e) { console.warn("Session init failed", e); }
+  
+  try {
+    await loadProducts();
+  } catch (e) { console.warn("Products init failed", e); }
+
+  setupReveals(liteMotion);
+  setupParallax(liteMotion);
+  setupIntro(liteMotion);
+}
+
+initApp();
 window.addEventListener("scroll", setNavState, { passive: true });
 
 // --- Gift Card & Scanner Logic ---
