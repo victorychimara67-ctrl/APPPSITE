@@ -926,19 +926,29 @@ async function createStripeCheckoutSession(req, order) {
     throw new Error("Stripe secret key is not configured on the server.");
   }
 
-  const stripe = Stripe(STRIPE_SECRET_KEY);
+  const stripe = Stripe(STRIPE_SECRET_KEY.trim());
 
   const amount = stripeAmount(order.total);
   if (amount <= 0) {
     throw new Error("Stripe requires an order total greater than zero.");
   }
 
-  const origin = SITE_URL || getRequestOrigin(req);
-  if (!origin) {
-    throw new Error("Could not determine site URL for Stripe checkout redirect.");
+  // Ensure origin is clean and has no trailing spaces or slashes
+  let origin = (SITE_URL || getRequestOrigin(req)).trim().replace(/\/+$/, "");
+  
+  // Fallback to request host if origin is somehow still broken
+  if (!origin || !origin.startsWith("http")) {
+    const proto = req.headers["x-forwarded-proto"] || "http";
+    const host = req.headers.host || `localhost:${PORT}`;
+    origin = `${proto}://${host}`;
   }
 
   try {
+    const successUrl = `${origin}/?payment=success&order=${order.id}`;
+    const cancelUrl = `${origin}/?payment=cancelled&order=${order.id}`;
+    
+    console.log("Creating Stripe session with URLs:", { successUrl, cancelUrl });
+
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
       customer_email: order.recipient.email,
@@ -959,18 +969,27 @@ async function createStripeCheckoutSession(req, order) {
         }
       ],
 
-      success_url: `${origin}/?payment=success&order=${order.id}`,
-      cancel_url: `${origin}/?payment=cancelled&order=${order.id}`
+      success_url: successUrl,
+      cancel_url: cancelUrl
     });
 
     if (!session.url) {
-      console.error("Stripe session created but missing URL", { sessionId: session.id, session });
       throw new Error("Stripe session was created but checkout URL is missing.");
     }
 
     return session;
   } catch (error) {
-    console.error("Stripe checkout creation failed", { error: error.message, orderTotal: order.total, origin });
+    console.error("Stripe checkout creation failed", { 
+      error: error.message, 
+      orderTotal: order.total, 
+      origin,
+      type: error.type,
+      code: error.code
+    });
+    // If it's a Stripe-specific URL error, provide a clearer message
+    if (error.message.includes("Not a valid URL")) {
+      throw new Error(`Stripe rejected the redirect URL. Ensure your SITE_URL environment variable is a full URL (e.g., https://your-site.vercel.app) with no spaces.`);
+    }
     throw error;
   }
 }
