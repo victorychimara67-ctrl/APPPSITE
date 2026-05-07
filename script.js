@@ -197,7 +197,14 @@ async function loadProducts() {
     const productPath = location.pathname.match(/^\/product\/(.+)$/);
     if (productPath) openProductDetail(decodeURIComponent(productPath[1]), false);
   } catch (error) {
-    productGrid.innerHTML = '<div class="product-empty">The ECI collection could not load. Please try again shortly.</div>';
+    console.warn("Product API failed, using local storefront fallback.", error);
+    const fallbackProducts = Object.values(products || {});
+    if (fallbackProducts.length) {
+      renderProducts(fallbackProducts);
+      showToast("Using local ECI products while the API is unavailable.");
+    } else {
+      productGrid.innerHTML = '<div class="product-empty">The ECI collection could not load. Please try again shortly.</div>';
+    }
   }
 }
 
@@ -529,8 +536,7 @@ logoutButton.addEventListener("click", async () => {
   updateAuthUi();
   showToast("Logged out");
 });
-checkoutForm.addEventListener
-("submit", async (event) => {
+checkoutForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   if (!checkoutForm.reportValidity()) return;
   if (!currentUser) {
