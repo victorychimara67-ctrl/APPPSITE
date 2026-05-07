@@ -691,11 +691,23 @@ async function routeApi(req, res, pathname) {
       return json(res, 200, { received: true });
     }
 
+    if (req.method === "GET" && pathname === "/api/admin/debug-db") {
+      const active = requireAdmin(req, res);
+      if (!active) return;
+      return json(res, 200, { 
+        memoryUsers: active.db.users.length, 
+        fileUsers: JSON.parse(readFileSync(dbPath, "utf8")).users.length,
+        memoryDb: active.db
+      });
+    }
+
     if (req.method === "POST" && pathname === "/api/auth/signup") {
       const body = await parseBody(req);
       const name = String(body.name || "").trim();
       const email = String(body.email || "").trim().toLowerCase();
       const password = String(body.password || "");
+      console.log("Signup attempt:", { name, email, passwordLength: password.length });
+      
       if (!name || !email.includes("@") || password.length < 8) {
         return json(res, 400, { error: "Use a name, valid email, and password with at least 8 characters." });
       }
@@ -712,7 +724,8 @@ async function routeApi(req, res, pathname) {
         ...(ADMIN_EMAILS.has(email) ? { role: "admin" } : {})
       };
       db.users.push(user);
-      writeDb(db);
+      const success = writeDb(db);
+      console.log("Signup success:", { email, persisted: success, totalUsers: db.users.length });
       return json(res, 201, { user: publicUser(user) }, { "Set-Cookie": makeCookie(user) });
     }
 
@@ -721,19 +734,23 @@ async function routeApi(req, res, pathname) {
       const email = String(body.email || "").trim().toLowerCase();
       const password = String(body.password || "");
       const db = readDb();
+      
+      console.log("Login attempt:", { email, usersCount: db.users.length });
+      
       const user = db.users.find((item) => item.email === email);
       
       if (!user) {
-        console.warn("Login failed: user not found", { email, attemptedEmail: body.email });
+        console.warn("Login failed: user not found in DB", { email, availableEmails: db.users.map(u => u.email) });
         return json(res, 401, { error: "Email or password is incorrect." });
       }
       
       const passwordValid = verifyPassword(password, user.passwordHash);
       if (!passwordValid) {
-        console.warn("Login failed: password incorrect for user", { email, passwordProvided: Boolean(password) });
+        console.warn("Login failed: password hash mismatch for", email);
         return json(res, 401, { error: "Email or password is incorrect." });
       }
       
+      console.log("Login success:", email);
       return json(res, 200, { user: publicUser(user) }, { "Set-Cookie": makeCookie(user) });
     }
 
@@ -1498,13 +1515,25 @@ async function routeAdmin(req, res, pathname) {
   if (req.method === "POST" && pathname.startsWith("/api/admin/orders/") && pathname.endsWith("/push-printful")) {
     const orderId = pathname.replace("/api/admin/orders/", "").replace("/push-printful", "");
     const order = db.orders.find(o => o.id === orderId);
+    
     if (!order) return json(res, 404, { error: "Order not found" });
+    
+    console.log(`ADMIN MANUAL PUSH: Attempting to push order ${orderId} to Printful...`);
+    
     try {
+      // Force status update if it was stuck
+      if (order.status === "pending_payment") {
+        console.warn(`ADMIN WARNING: Pushing order ${orderId} despite PENDING_PAYMENT status.`);
+      }
+      
       await submitOrderToPrintful(order);
       writeDb(db);
+      
+      console.log(`ADMIN MANUAL PUSH SUCCESS: Order ${orderId} is now in Printful (ID: ${order.printfulOrder?.id})`);
       return json(res, 200, { success: true, order });
     } catch (e) {
-      return json(res, 500, { error: e.message });
+      console.error(`ADMIN MANUAL PUSH FAILED for order ${orderId}:`, e.message);
+      return json(res, 500, { error: `Printful Error: ${e.message}` });
     }
   }
   

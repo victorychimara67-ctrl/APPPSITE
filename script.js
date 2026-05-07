@@ -842,28 +842,41 @@ async function loadAdmin() {
       </div>
     `).join("") || "<p>No users yet.</p>";
 
-    adminOrders.innerHTML = payload.orders.map((order) => `
-      <div class="admin-order-card">
-        <div class="order-header">
-          <span class="order-id">Order #${order.id.slice(-6).toUpperCase()}</span>
-          <span class="order-status ${order.status}">${order.statusLabel || order.status.replace(/_/g, " ")}</span>
-        </div>
-        <div class="admin-order-info">
-          <span class="admin-order-email">${escapeHtml(order.recipient?.email || "No email")}</span>
-          <strong class="order-total">${money(order.total || 0, order.currency || currency)}</strong>
-        </div>
-        <div class="admin-order-actions">
-          ${!order.printfulOrder?.id ? `
-            <button class="button primary mini" data-push-printful="${order.id}">PUSH TO PRINTFUL</button>
-          ` : `
-            <div class="status-badge">
-              <i></i>
-              Synced: ${order.printfulOrder.id}
+    adminOrders.innerHTML = payload.orders.map((order) => {
+      const itemList = order.items.map(i => `${i.quantity}x ${i.name}`).join(", ");
+      const name = order.recipient?.name || "Guest";
+      const statusLabel = order.statusLabel || order.status.replace(/_/g, " ");
+      
+      return `
+        <div class="admin-order-card">
+          <div class="order-header">
+            <span class="order-id">Order #${order.id.slice(-6).toUpperCase()}</span>
+            <span class="order-status ${order.status}">${statusLabel}</span>
+          </div>
+          <div class="admin-order-info">
+            <div class="admin-order-customer">
+              <strong>${escapeHtml(name)}</strong>
+              <span>${escapeHtml(order.recipient?.email || "No email")}</span>
             </div>
-          `}
+            <div class="admin-order-details">
+              <p class="admin-order-items">${escapeHtml(itemList)}</p>
+              ${order.customOrder?.designNotes ? `<p class="admin-order-notes">Notes: ${escapeHtml(order.customOrder.designNotes)}</p>` : ""}
+            </div>
+            <strong class="order-total">${money(order.total || 0, order.currency || currency)}</strong>
+          </div>
+          <div class="admin-order-actions">
+            ${!order.printfulOrder?.id ? `
+              <button class="button primary mini" data-push-printful="${order.id}">PUSH TO PRINTFUL</button>
+            ` : `
+              <div class="status-badge synced">
+                <i></i>
+                Synced: <a href="${order.printfulOrder.dashboard_url}" target="_blank">${order.printfulOrder.id}</a>
+              </div>
+            `}
+          </div>
         </div>
-      </div>
-    `).join("") || "<p>No orders yet.</p>";
+      `;
+    }).join("") || "<p>No orders yet.</p>";
     adminDiscounts.innerHTML = payload.discountCodes.map((discount) => `
       <article>
         <strong>${escapeHtml(discount.code)}${discount.isGiftCard ? " - gift card" : ""}</strong>

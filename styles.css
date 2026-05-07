@@ -2657,3 +2657,56 @@ input[type="checkbox"] {
 #processingModal[data-persistent="true"] .modal-close {
   display: none;
 }
+
+
+/* Enhanced Admin Order Cards */
+.admin-order-card {
+  padding: 15px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+
+.admin-order-info {
+  display: grid;
+  grid-template-columns: 1fr 2fr auto;
+  gap: 15px;
+  align-items: start;
+  margin: 12px 0;
+}
+
+.admin-order-customer strong {
+  display: block;
+  font-size: 14px;
+}
+
+.admin-order-customer span {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.admin-order-items {
+  font-size: 12px;
+  color: #eee;
+}
+
+.admin-order-notes {
+  font-size: 10px;
+  color: var(--accent);
+  margin-top: 4px;
+  font-style: italic;
+}
+
+.status-badge.synced {
+  background: rgba(0, 255, 136, 0.1);
+  color: #00ff88;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+}
+
+.status-badge.synced a {
+  color: inherit;
+  text-decoration: underline;
+}
