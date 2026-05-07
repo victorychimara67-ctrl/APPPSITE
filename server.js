@@ -869,7 +869,18 @@ function stripeAmount(value) {
 }
 
 function getRequestOrigin(req) {
-  if (SITE_URL && SITE_URL.startsWith("http")) return SITE_URL;
+  // Use the same nuclear cleaning logic for consistency
+  const clean = (val) => String(val || "").replace(/[^\x20-\x7E]/g, "").trim();
+  const rawSiteUrl = clean(SITE_URL);
+  
+  if (rawSiteUrl && rawSiteUrl.startsWith("http")) {
+    try {
+      return new URL(rawSiteUrl).origin;
+    } catch (e) {
+      // If it's still broken, fall through to auto-detection
+    }
+  }
+
   const proto = req.headers["x-forwarded-proto"] || "http";
   const host = req.headers["x-forwarded-host"] || req.headers.host || `localhost:${PORT}`;
   return `${proto}://${host}`.replace(/\/+$/, "");
