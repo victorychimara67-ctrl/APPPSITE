@@ -335,7 +335,19 @@ function getSession(req) {
   const claims = verifyAuthToken(raw);
   if (!claims) return null;
   const db = readDb();
-  const user = db.users.find((item) => item.id === claims.sub || item.email === claims.email);
+  let user = db.users.find((item) => item.id === claims.sub || item.email === claims.email);
+  
+  // If user not in DB (common on Vercel/restart), reconstruct from token claims
+  if (!user && claims.sub && claims.email) {
+    user = {
+      id: claims.sub,
+      email: claims.email,
+      name: claims.name || "Customer",
+      role: claims.role || "customer",
+      isVirtual: true // Mark so we know they aren't persisted yet
+    };
+  }
+  
   return user ? { db, user, claims } : null;
 }
 
@@ -849,6 +861,25 @@ async function routeApi(req, res, pathname) {
         return order.userId === active.user.id || 
                String(order.recipient?.email || "").toLowerCase() === userEmail;
       });
+
+      // VERCEL RECOVERY: If no orders in DB, try fetching from Stripe directly
+      if (userOrders.length === 0 && process.env.STRIPE_SECRET_KEY) {
+        try {
+          console.log(`RECOVERY: Fetching orders from Stripe for ${userEmail}...`);
+          const stripe = Stripe(STRIPE_SECRET_KEY.trim().replace(/[^\x20-\x7E]/g, ""));
+          const sessions = await stripe.checkout.sessions.list({ limit: 50 });
+          
+          for (const session of sessions.data) {
+            if (session.payment_status === "paid" && session.customer_details?.email?.toLowerCase() === userEmail) {
+              const recovered = await finalizePaidOrder(session, active.db);
+              if (recovered) userOrders.push(recovered);
+            }
+          }
+          if (userOrders.length > 0) writeDb(active.db);
+        } catch (e) {
+          console.warn("RECOVERY FAILED:", e.message);
+        }
+      }
 
       // Sync and map
       await Promise.all(userOrders.slice(-5).map(order => {
