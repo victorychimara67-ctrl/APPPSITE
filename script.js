@@ -158,7 +158,16 @@ function shouldUseLiteMotion() {
 
 function money(value, currency = "USD") {
   if (value === null || value === undefined) return "Price on Printful";
-  return new Intl.NumberFormat("en-US", { style: "currency", currency }).format(value);
+  try {
+    const cleanCurrency = String(currency || "USD").toUpperCase().trim();
+    // Currency must be 3 letters for Intl.NumberFormat
+    return new Intl.NumberFormat("en-US", { 
+      style: "currency", 
+      currency: cleanCurrency.length === 3 ? cleanCurrency : "USD" 
+    }).format(value);
+  } catch (e) {
+    return `${currency || "£"}${Number(value).toFixed(2)}`;
+  }
 }
 
 function compactFileName(name, fallback = "Uploaded file") {
@@ -187,30 +196,47 @@ function renderProducts(productList) {
     productList = [];
   }
   allProducts = productList;
-  products = Object.fromEntries(productList.map((product) => [product.id, product]));
+  
+  try {
+    products = Object.fromEntries(productList.filter(p => p && p.id).map((product) => [product.id, product]));
+  } catch (e) {
+    console.warn("Failed to index products", e);
+  }
+  
   if (!productList.length) {
-    productGrid.innerHTML = '<div class="product-empty">No ECI products are available right now.</div>';
+    productGrid.innerHTML = '<div class="product-empty">No ECI products found. Please ensure your Printful products are synced and not hidden.</div>';
     return;
   }
-  productGrid.innerHTML = productList
-    .map(
-      (product) => `
-        <article class="product-card reveal visible" data-product-id="${product.id}">
-          <img src="${escapeHtml(product.image)}" alt="${escapeHtml(productAlt(product.name))}" title="Emmanuel CI Universe ECI Brand" loading="lazy" decoding="async" />
-          <div>
-            <h3>${escapeHtml(product.name)}</h3>
-            <p>${money(product.price, product.currency)}</p>
-            ${renderVariantSelect(product)}
-          </div>
-          <div class="product-actions">
-            <button class="btn-buy" aria-label="Buy ${escapeHtml(product.name)} now">BUY NOW</button>
-            <button class="btn-add" aria-label="Add ${escapeHtml(product.name)} to cart">+</button>
-          </div>
-        </article>
-      `
-    )
-    .join("");
-  enableLazyImages(productGrid);
+
+  try {
+    productGrid.innerHTML = productList
+      .map((product) => {
+        try {
+          return `
+            <article class="product-card" data-product-id="${product.id}">
+              <img src="${escapeHtml(product.image)}" alt="${escapeHtml(productAlt(product.name))}" title="ECI Universe" loading="lazy" />
+              <div>
+                <h3>${escapeHtml(product.name)}</h3>
+                <p>${money(product.price, product.currency)}</p>
+                ${renderVariantSelect(product)}
+              </div>
+              <div class="product-actions">
+                <button class="btn-buy" aria-label="Buy ${escapeHtml(product.name)}">BUY NOW</button>
+                <button class="btn-add" aria-label="Add to cart">+</button>
+              </div>
+            </article>
+          `;
+        } catch (err) {
+          console.warn("Skipping malformed product", product, err);
+          return "";
+        }
+      })
+      .join("");
+    enableLazyImages(productGrid);
+  } catch (globalErr) {
+    console.error("Critical rendering failure", globalErr);
+    productGrid.innerHTML = '<div class="product-empty">A technical error occurred while loading the collection.</div>';
+  }
 }
 
 function renderVariantSelect(product) {
