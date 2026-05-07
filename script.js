@@ -82,14 +82,24 @@ let products = {
 };
 
 async function api(path, options = {}) {
-  const response = await fetch(path, {
-    headers: { "Content-Type": "application/json", ...(options.headers || {}) },
-    credentials: "same-origin",
-    ...options
-  });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(payload.error || "Request failed");
-  return payload;
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), 8000); // 8 second timeout
+  
+  try {
+    const response = await fetch(path, {
+      headers: { "Content-Type": "application/json", ...(options.headers || {}) },
+      credentials: "same-origin",
+      signal: controller.signal,
+      ...options
+    });
+    clearTimeout(id);
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error || "Request failed");
+    return payload;
+  } catch (err) {
+    clearTimeout(id);
+    throw err;
+  }
 }
 
 function setNavState() {
@@ -214,19 +224,13 @@ function renderVariantSelect(product) {
 async function loadProducts() {
   try {
     const payload = await api("/api/products");
-    allProducts = payload.products;
+    allProducts = payload.products || [];
+    renderProducts(allProducts);
     
-    // TICKER UPDATE
-    const tickerContent = document.getElementById("ticker-content");
-    if (tickerContent && payload.ticker) {
-      tickerContent.textContent = payload.ticker;
-    }
-
     // TARGETED POPUP LOGIC
     if (payload.popupConfig && payload.popupConfig.enabled) {
       const isTargeted = payload.popupConfig.targetEmails && payload.popupConfig.targetEmails.length > 0;
       const shouldShow = !isTargeted || (currentUser && payload.popupConfig.targetEmails.includes(currentUser.email));
-      
       if (shouldShow) {
         setTimeout(() => {
           if (!localStorage.getItem("popup_dismissed_" + payload.popupConfig.code)) {
@@ -236,18 +240,20 @@ async function loadProducts() {
       }
     }
 
-    renderProducts(allProducts);
     const productPath = location.pathname.match(/^\/product\/(.+)$/);
     if (productPath) openProductDetail(decodeURIComponent(productPath[1]), false);
   } catch (error) {
     console.warn("Product API failed, using local storefront fallback.", error);
-    const fallbackProducts = Object.values(products || {});
-    if (fallbackProducts.length) {
-      renderProducts(fallbackProducts);
-      showToast("Using local ECI products while the API is unavailable.");
-    } else {
-      productGrid.innerHTML = '<div class="product-empty">The ECI collection could not load. Please try again shortly.</div>';
-    }
+    // Hardcoded fallback list
+    const fallbackList = [
+      { id: "hoodie", name: "ECI Essential Hoodie", price: 89.99, image: "assets/product-hoodie.png" },
+      { id: "tee", name: "ECI Minimal Tee", price: 49.99, image: "assets/product-tee.png" },
+      { id: "jacket", name: "ECI Puffer Jacket", price: 129.99, image: "assets/product-jacket.png" },
+      { id: "cap", name: "ECI Minimal Cap", price: 29.99, image: "assets/product-cap.png" },
+      { id: "pants", name: "ECI Cargo Pants", price: 79.99, image: "assets/product-pants.png" },
+      { id: "sneakers", name: "ECI Core Sneakers", price: 119.99, image: "assets/product-sneakers.png" }
+    ];
+    renderProducts(fallbackList);
   }
 }
 
@@ -1498,17 +1504,15 @@ if (copyDiscountBtn) {
 }
 
 async function initApp() {
-  try {
-    await loadSession();
-  } catch (e) { console.warn("Session init failed", e); }
-  
-  try {
-    await loadProducts();
-  } catch (e) { console.warn("Products init failed", e); }
-
-  setupReveals(liteMotion);
-  setupParallax(liteMotion);
-  setupIntro(liteMotion);
+  // Load session and products in parallel to prevent blocking
+  Promise.all([
+    loadSession().catch(e => console.warn("Session init failed", e)),
+    loadProducts().catch(e => console.warn("Products init failed", e))
+  ]).finally(() => {
+    setupReveals(liteMotion);
+    setupParallax(liteMotion);
+    setupIntro(liteMotion);
+  });
 }
 
 initApp();
