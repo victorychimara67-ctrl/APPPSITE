@@ -530,9 +530,22 @@ async function getProducts() {
 
   try {
     productCache.syncing = true;
-    console.log(`Printful: Starting sync for Store ID: ${PRINTFUL_STORE_ID}...`);
     
-    const payload = await printful("/store/products?limit=100", { timeout: 15000 });
+    let storeId = PRINTFUL_STORE_ID;
+    if (!storeId && PRINTFUL_TOKEN) {
+      console.log("Printful: Store ID missing, attempting auto-discovery...");
+      try {
+        const stores = await printful("/stores");
+        storeId = stores.result?.[0]?.id;
+        if (storeId) console.log(`Printful: Discovered Store ID: ${storeId}`);
+      } catch (e) { console.error("Printful: Auto-discovery failed:", e.message); }
+    }
+
+    console.log(`Printful: Starting sync for Store ID: ${storeId || "UNKNOWN"}...`);
+    const payload = await printful("/store/products?limit=100", { 
+      timeout: 15000,
+      headers: storeId ? { "X-PF-Store-Id": storeId } : {}
+    });
     const summaries = payload.result || [];
     console.log(`Printful: Found ${summaries.length} products. Fetching details...`);
     
@@ -1904,7 +1917,26 @@ async function routeApi(req, res, pathname, url) {
   
   // Health & Diagnostics
   if (req.method === "GET" && pathname === "/api/health") {
-    return json(res, 200, { ok: true, version: "2.0.0", connected: !!PRINTFUL_TOKEN });
+    return json(res, 200, { ok: true, version: "3.0.0", connected: !!PRINTFUL_TOKEN });
+  }
+
+  if (req.method === "GET" && pathname === "/api/debug") {
+    return json(res, 200, {
+      env: {
+        PRINTFUL_TOKEN: !!PRINTFUL_TOKEN,
+        PRINTFUL_STORE_ID: PRINTFUL_STORE_ID || "MISSING (Will try auto-fetch)",
+        STRIPE_SECRET_KEY: !!STRIPE_SECRET_KEY,
+        SUPABASE_URL: !!process.env.SUPABASE_URL,
+        SUPABASE_KEY: !!process.env.SUPABASE_ANON_KEY,
+        SITE_URL: SITE_URL || "MISSING (Using request origin)",
+        VERCEL: !!process.env.VERCEL
+      },
+      db: {
+        users: db.users.length,
+        orders: db.orders.length,
+        usingSupabase: !!(process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY)
+      }
+    });
   }
 
   if (req.method === "POST" && pathname === "/api/webhook") {

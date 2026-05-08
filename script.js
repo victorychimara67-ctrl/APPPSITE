@@ -393,6 +393,16 @@ async function initApp() {
     loadProducts()
   ]);
   
+  if (currentUser?.role === "admin") {
+    api("/api/debug").then(debug => {
+      const missing = Object.entries(debug.env).filter(([k, v]) => !v).map(([k]) => k);
+      if (missing.length) {
+        console.warn("ADMIN ALERT: Missing Environment Variables on Vercel:", missing);
+        showToast("Admin: Missing variables - " + missing.join(", "), "warning");
+      }
+    });
+  }
+  
   setupReveals(liteMotion);
   setupParallax(liteMotion);
   setupIntro(liteMotion);
