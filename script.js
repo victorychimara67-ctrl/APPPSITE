@@ -165,7 +165,8 @@ async function loadSession() {
 
 function updateAuthUi() {
   if (!accountPanel || !adminButton) return;
-  adminButton.classList.toggle("hidden", !currentUser?.role === "admin");
+  const isAdmin = currentUser && currentUser.role === "admin";
+  adminButton.classList.toggle("hidden", !isAdmin);
   if (currentUser) {
     loginForm?.classList.add("hidden");
     signupForm?.classList.add("hidden");
