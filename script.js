@@ -367,8 +367,172 @@ function setupIntro(lite) {
 
 // Global Handlers
 window.addEventListener("scroll", setNavState, { passive: true });
+
+// Modal Closing
 document.querySelectorAll("[data-close]").forEach(btn => {
   btn.addEventListener("click", () => closeModal(document.getElementById(btn.dataset.close)));
+});
+
+[authModal, cartModal, productModal, adminModal, searchModal].forEach(modal => {
+  modal?.addEventListener("click", (e) => { if (e.target === modal) closeModal(modal); });
+});
+
+// Navigation Buttons
+searchButton?.addEventListener("click", () => openModal(searchModal));
+profileButton?.addEventListener("click", () => openModal(authModal));
+cartButton?.addEventListener("click", () => { renderCart(); openModal(cartModal); });
+adminButton?.addEventListener("click", () => { loadAdmin(); openModal(adminModal); });
+
+// Auth Tabs
+document.querySelectorAll("[data-auth-tab]").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll("[data-auth-tab]").forEach(t => t.classList.remove("active"));
+    btn.classList.add("active");
+    loginForm?.classList.toggle("hidden", btn.dataset.authTab !== "login");
+    signupForm?.classList.toggle("hidden", btn.dataset.authTab !== "signup");
+  });
+});
+
+// --- Auth Operations ---
+loginForm?.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  try {
+    const payload = await api("/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ email: loginForm.email.value, password: loginForm.password.value })
+    });
+    currentUser = payload.user;
+    updateAuthUi();
+    closeModal(authModal);
+    showToast("Welcome back, " + currentUser.name);
+  } catch (err) { showToast(err.message); }
+});
+
+signupForm?.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  try {
+    const payload = await api("/api/auth/signup", {
+      method: "POST",
+      body: JSON.stringify({ name: signupForm.name.value, email: signupForm.email.value, password: signupForm.password.value })
+    });
+    currentUser = payload.user;
+    updateAuthUi();
+    closeModal(authModal);
+    showToast("Account created!");
+  } catch (err) { showToast(err.message); }
+});
+
+logoutButton?.addEventListener("click", async () => {
+  await api("/api/auth/logout", { method: "POST" });
+  currentUser = null;
+  updateAuthUi();
+  showToast("Signed out");
+});
+
+// --- Cart Logic ---
+function renderCart() {
+  if (!cartItems) return;
+  if (!cart.length) {
+    cartItems.innerHTML = '<div class="cart-empty">Your cart is empty.</div>';
+    if (checkoutForm) checkoutForm.style.display = "none";
+    return;
+  }
+  if (checkoutForm) checkoutForm.style.display = "grid";
+  cartItems.innerHTML = cart.map((item, i) => `
+    <div class="cart-row">
+      <img src="${escapeHtml(item.image)}" alt="${escapeHtml(item.name)}" />
+      <div class="cart-details">
+        <strong>${escapeHtml(item.name)}</strong>
+        <span>${money(item.price, item.currency)}</span>
+      </div>
+      <div class="cart-actions">
+        <button onclick="updateQuantity(${i}, -1)">-</button>
+        <span>${item.quantity}</span>
+        <button onclick="updateQuantity(${i}, 1)">+</button>
+      </div>
+    </div>
+  `).join("");
+  renderCheckoutSummary();
+}
+
+window.updateQuantity = (index, delta) => {
+  cart[index].quantity += delta;
+  if (cart[index].quantity <= 0) cart.splice(index, 1);
+  persistCart();
+  renderCart();
+};
+
+async function renderCheckoutSummary() {
+  if (!checkoutSummary) return;
+  const subtotal = cart.reduce((s, i) => s + (i.price * i.quantity), 0);
+  const currency = cart[0]?.currency || "USD";
+  checkoutSummary.innerHTML = `
+    <div class="summary-line"><span>Subtotal</span><strong>${money(subtotal, currency)}</strong></div>
+    <div class="summary-line total"><span>Total</span><strong>${money(subtotal, currency)}</strong></div>
+  `;
+}
+
+checkoutForm?.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const btn = checkoutForm.querySelector("button[type='submit']");
+  btn.disabled = true;
+  btn.textContent = "Processing...";
+  try {
+    const payload = await api("/api/checkout", {
+      method: "POST",
+      body: JSON.stringify({ items: cart, email: checkoutForm.email.value, name: checkoutForm.name.value })
+    });
+    if (payload.url) window.location.href = payload.url;
+  } catch (err) {
+    showToast(err.message);
+    btn.disabled = false;
+    btn.textContent = "CHECKOUT NOW";
+  }
+});
+
+// --- Search Logic ---
+searchInput?.addEventListener("input", (e) => {
+  const query = e.target.value.toLowerCase().trim();
+  if (!query) {
+    searchResults.innerHTML = "";
+    return;
+  }
+  const filtered = allProducts.filter(p => p.name.toLowerCase().includes(query) || p.description?.toLowerCase().includes(query));
+  searchResults.innerHTML = filtered.map(p => `
+    <div class="search-result-item" onclick="openProductDetail('${p.id}'); closeModal(searchModal)">
+      <img src="${escapeHtml(p.image)}" alt="${escapeHtml(p.name)}" />
+      <div>
+        <strong>${escapeHtml(p.name)}</strong>
+        <span>${money(p.price, p.currency)}</span>
+      </div>
+    </div>
+  `).join("") || '<p style="padding: 20px; text-align: center;">No results found.</p>';
+});
+
+// --- Admin Logic ---
+async function loadAdmin() {
+  try {
+    const stats = await api("/api/admin/stats");
+    if (adminStats) adminStats.innerHTML = `
+      <div class="stat-card"><h3>Orders</h3><p>${stats.totalOrders}</p></div>
+      <div class="stat-card"><h3>Revenue</h3><p>${money(stats.totalRevenue)}</p></div>
+      <div class="stat-card"><h3>Users</h3><p>${stats.totalUsers}</p></div>
+    `;
+  } catch (e) { console.warn("Admin load failed", e); }
+}
+
+syncPrintfulButton?.addEventListener("click", async () => {
+  syncPrintfulButton.disabled = true;
+  syncPrintfulButton.textContent = "Syncing...";
+  try {
+    await api("/api/admin/sync-printful", { method: "POST" });
+    showToast("Printful sync triggered! Products will refresh shortly.");
+    loadProducts();
+  } catch (err) { showToast(err.message); }
+  finally {
+    syncPrintfulButton.disabled = false;
+    syncPrintfulButton.textContent = "SYNC PRINTFUL";
+  }
 });
 
 // Start the app
