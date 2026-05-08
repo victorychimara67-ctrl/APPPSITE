@@ -192,7 +192,29 @@ async function writeDb(db, options = {}) {
       
       console.log(`Supabase Save: PATCH status ${res.status}`);
       
-      // If PATCH fails (e.g. no row found), try an INSERT
+      // SYNC USERS TO INDIVIDUAL TABLE FOR DASHBOARD VISIBILITY
+      if (db.users && db.users.length > 0) {
+        console.log(`Supabase: Attempting to sync ${db.users.length} users to 'users' table...`);
+        try {
+          // Note: This is an upsert using Prefer: resolution=merge-duplicates
+          await fetch(`${supabaseUrl}/rest/v1/users`, {
+            method: "POST",
+            headers: { 
+              "apikey": supabaseKey, 
+              "Authorization": `Bearer ${supabaseKey}`,
+              "Content-Type": "application/json",
+              "Prefer": "resolution=merge-duplicates"
+            },
+            body: JSON.stringify(db.users.map(u => ({
+              id: u.id,
+              name: u.name,
+              email: u.email,
+              role: u.role,
+              created_at: u.createdAt
+            })))
+          });
+        } catch (e) { console.warn("Supabase: Individual user sync failed (table might be missing)", e.message); }
+      }
       if (res.status === 204 || res.status === 200) {
         console.log("Supabase Success: Cloud state updated.");
       } else {
@@ -2018,6 +2040,11 @@ async function routeApi(req, res, pathname, url) {
     return json(res, 200, { user: sanitizeUser(newUser) });
   }
 
+  if (req.method === "POST" && pathname === "/api/auth/logout") {
+    res.setHeader("Set-Cookie", "session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0");
+    return json(res, 200, { success: true });
+  }
+
   // CHECKOUT - THE BROKEN PART
   if (req.method === "POST" && pathname === "/api/checkout") {
     if (!STRIPE_SECRET_KEY) return json(res, 500, { error: "Stripe not configured" });
@@ -2081,8 +2108,17 @@ async function routeApi(req, res, pathname, url) {
     if (req.method === "POST" && pathname === "/api/admin/sync-printful") {
       console.log("Admin: Manual Printful sync triggered.");
       productCache = { expiresAt: 0, products: null, source: "", connected: false, syncing: false };
-      const data = await getProducts();
-      return json(res, 200, { success: true, count: data.products?.length || 0 });
+      try {
+        const data = await getProducts();
+        return json(res, 200, { 
+          success: true, 
+          count: (data.products || []).length,
+          source: data.source,
+          warning: data.warning || ""
+        });
+      } catch (err) {
+        return json(res, 500, { error: "Manual Sync Failed", message: err.message });
+      }
     }
   }
 
