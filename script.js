@@ -205,7 +205,11 @@ function normalizeCheckoutCountry(value) {
 }
 
 function renderProducts(productList) {
-  if (!productGrid) return;
+  console.log("renderProducts: Rendering", productList.length, "items");
+  if (!productGrid) {
+    console.error("renderProducts: #productGrid element not found!");
+    return;
+  }
   if (!Array.isArray(productList)) {
     console.error("renderProducts: Expected array, got", typeof productList);
     productList = [];
@@ -228,16 +232,15 @@ function renderProducts(productList) {
       .map((product) => {
         try {
           return `
-            <article class="product-card" data-product-id="${product.id}">
-              <img src="${escapeHtml(product.image)}" alt="${escapeHtml(productAlt(product.name))}" title="ECI Universe" loading="lazy" />
+            <article class="product-card reveal" onclick="openProductDetail('${product.id}')" role="button" aria-label="View ${escapeHtml(product.name)}">
+              <img src="${escapeHtml(product.image)}" alt="${escapeHtml(productAlt(product.name))}" loading="lazy" decoding="async" />
               <div>
                 <h3>${escapeHtml(product.name)}</h3>
-                <p>${money(product.price, product.currency)}</p>
+                <p>${money(product.price, product.currency || "USD")}</p>
                 ${renderVariantSelect(product)}
               </div>
               <div class="product-actions">
-                <button class="btn-buy" aria-label="Buy ${escapeHtml(product.name)}">BUY NOW</button>
-                <button class="btn-add" aria-label="Add to cart">+</button>
+                <button class="button primary mini" onclick="event.stopPropagation(); addToCart('${product.id}')">ADD TO CART</button>
               </div>
             </article>
           `;

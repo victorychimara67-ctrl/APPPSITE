@@ -20,13 +20,33 @@ const PRINTFUL_AUTO_CONFIRM = String(process.env.PRINTFUL_AUTO_CONFIRM || "false
 const STRIPE_SECRET_KEY = (process.env.STRIPE_SECRET_KEY || "").trim();
 const STRIPE_PUBLISHABLE_KEY = (process.env.STRIPE_PUBLISHABLE_KEY || "").trim();
 const STRIPE_WEBHOOK_SECRET = (process.env.STRIPE_WEBHOOK_SECRET || "").trim();
-const SITE_URL = normalizeSiteUrl(process.env.SITE_URL || process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL || "");
+const SITE_URL = (process.env.SITE_URL || process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL || "").trim().replace(/\/+$/, "");
+
 const ADMIN_EMAILS = new Set(
   (process.env.ADMIN_EMAILS || "victorychimara67@gmail.com")
     .split(",")
     .map((email) => email.trim().toLowerCase())
     .filter(Boolean)
 );
+
+// Self-Check on Startup
+(function selfCheck() {
+  console.log("ECI UNIVERSE: Starting Self-Check...");
+  const checks = {
+    PORT,
+    DATA_DIR: existsSync(dataDir),
+    DB_FILE: existsSync(dbPath),
+    PRINTFUL_TOKEN: (PRINTFUL_TOKEN || "").length > 10,
+    PRINTFUL_STORE: !!PRINTFUL_STORE_ID,
+    STRIPE: !!STRIPE_SECRET_KEY,
+    NODE_VERSION: process.version
+  };
+  console.table(checks);
+  if (!checks.DATA_DIR) {
+    console.warn("WARNING: data directory missing. Creating it now...");
+    try { mkdirSync(dataDir, { recursive: true }); } catch(e) {}
+  }
+})();
 
 function mapOrderStatus(status, isAdmin) {
   const s = String(status || "pending").toLowerCase();
@@ -483,79 +503,74 @@ async function getProducts() {
   const hidden = new Set(db.hiddenProducts || []);
   
   if (!PRINTFUL_TOKEN) {
-    console.log("Printful: No token, using local products.");
     return { source: "local", products: applyProductOverrides(localProducts, db).filter((p) => !hidden.has(p.id)) };
   }
 
-  // Rapid cache check
+  // Fast cache return
   if (productCache.products && productCache.products.length > 0 && productCache.expiresAt > Date.now()) {
     return {
-      source: productCache.source || "printful",
-      connected: productCache.connected,
-      warning: productCache.warning || "",
+      source: "cache",
       products: applyProductOverrides(productCache.products, db).filter((p) => !hidden.has(p.id))
     };
   }
 
-  // If we have any cached products (even expired), return them immediately if we are in a high-concurrency state
-  // This prevents multiple parallel requests from hitting Printful at once
+  // Prevent multiple parallel syncs
   if (productCache.syncing) {
     return {
-      source: productCache.source || "printful",
-      connected: productCache.connected,
-      products: applyProductOverrides(productCache.products || localProducts, db).filter((p) => !hidden.has(p.id)),
-      warning: "Sync in progress..."
+      source: "syncing",
+      products: applyProductOverrides(productCache.products || localProducts, db).filter((p) => !hidden.has(p.id))
     };
   }
 
+  const syncStartTime = Date.now();
+  const VERCEL_SYNC_LIMIT = process.env.VERCEL ? 8500 : 25000; // Shorter on Vercel to prevent 504
+
   try {
     productCache.syncing = true;
-    console.log("Printful: Syncing products...");
-    const payload = await printful("/store/products?limit=100", { timeout: 12000 });
-    const summaries = (payload.result || []);
+    console.log(`Printful: Syncing (Vercel=${!!process.env.VERCEL})...`);
     
-    if (summaries.length === 0) {
-      console.warn("Printful: No products found in store.");
-    }
+    const payload = await printful("/store/products?limit=50", { timeout: 10000 });
+    const summaries = payload.result || [];
+    
+    const products = [];
+    const chunkSize = process.env.VERCEL ? 3 : 8;
+    
+    for (let i = 0; i < summaries.length; i += chunkSize) {
+      // Check for global timeout
+      if (Date.now() - syncStartTime > VERCEL_SYNC_LIMIT) {
+        console.warn("Printful: Sync reached time limit, returning partial list.");
+        break;
+      }
 
-    // Process products in parallel with a strict timeout for each
-    const detailed = await Promise.all(
-      summaries.slice(0, 40).map(async (item) => { // Limit to 40 for stability
+      const chunk = summaries.slice(i, i + chunkSize);
+      const details = await Promise.all(chunk.map(async (item) => {
         try {
           const detail = await printful(`/store/products/${item.id}`, { timeout: 6000 });
           return mapPrintfulProduct(item, detail.result);
-        } catch (err) {
-          console.warn(`Printful: Failed to load detail for ${item.name || item.id}: ${err.message}`);
-          return mapPrintfulProduct(item, null);
+        } catch (e) {
+          return mapPrintfulProduct(item, null); // Fallback to summary data
         }
-      })
-    );
-
-    const products = detailed.filter(Boolean);
-    if (products.length === 0 && summaries.length > 0) {
-      summaries.forEach(s => products.push(mapPrintfulProduct(s, null)));
+      }));
+      products.push(...details.filter(Boolean));
+      if (products.length >= 36) break;
     }
 
     productCache = {
-      expiresAt: Date.now() + 1000 * 60 * 15, // 15 min cache
+      expiresAt: Date.now() + 1000 * 60 * 15,
       products,
       source: "printful",
       connected: true,
-      warning: "",
       syncing: false
     };
-    console.log(`Printful: Synced ${products.length} products.`);
-    return { source: "printful", connected: true, products: applyProductOverrides(productCache.products, db).filter((p) => !hidden.has(p.id)) };
+    return { source: "printful", products: applyProductOverrides(products, db).filter((p) => !hidden.has(p.id)) };
   } catch (error) {
-    console.warn(`Printful: API Sync failed: ${error.message}`);
+    console.error("Printful Sync Error:", error.message);
     productCache.syncing = false;
-    // Fallback to what we have or local
-    const fallbackProducts = productCache.products || localProducts;
+    const fallback = productCache.products || localProducts;
     return {
-      source: "fallback",
-      connected: false,
-      warning: `Printful unavailable: ${error.message}`,
-      products: applyProductOverrides(fallbackProducts, db).filter((p) => !hidden.has(p.id))
+      source: "error_fallback",
+      warning: error.message,
+      products: applyProductOverrides(fallback, db).filter((p) => !hidden.has(p.id))
     };
   }
 }
@@ -1869,33 +1884,41 @@ async function ensureDb() {
 }
 
 async function handleRequest(req, res) {
-  await ensureDb();
-  const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
-  
-  // Basic Analytics & Live Users (optimized to avoid redundant DB writes)
-  if (!url.pathname.startsWith("/api/") && !url.pathname.includes(".")) {
-    const db = readDb();
-    db.analytics.totalVisits++;
-    const ref = req.headers.referer || "Direct";
-    db.analytics.referrers[ref] = (db.analytics.referrers[ref] || 0) + 1;
-    // Debounce or only write on API calls/milestones
-    if (db.analytics.totalVisits % 5 === 0) await writeDb(db);
-  }
+  try {
+    await ensureDb();
+    const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
+    
+    // Basic Analytics
+    if (!url.pathname.startsWith("/api/") && !url.pathname.includes(".")) {
+      const db = readDb();
+      db.analytics.totalVisits++;
+      const ref = req.headers.referer || "Direct";
+      db.analytics.referrers[ref] = (db.analytics.referrers[ref] || 0) + 1;
+      if (db.analytics.totalVisits % 5 === 0) writeDb(db); // Async write
+    }
 
-  // Heartbeat for live users
-  const sessionToken = getCookie(req, "session") || req.socket.remoteAddress;
-  liveUsers.set(sessionToken, Date.now());
-  
-  // Cleanup old heartbeats
-  for (const [token, time] of liveUsers.entries()) {
-    if (Date.now() - time > 60000) liveUsers.delete(token);
-  }
+    const sessionToken = getCookie(req, "session") || req.socket.remoteAddress;
+    liveUsers.set(sessionToken, Date.now());
+    
+    // Heartbeat cleanup
+    if (Math.random() < 0.1) {
+      for (const [token, time] of liveUsers.entries()) {
+        if (Date.now() - time > 60000) liveUsers.delete(token);
+      }
+    }
 
-  if (url.pathname.startsWith("/api/")) {
-    await routeApi(req, res, url.pathname, url);
-    return;
+    if (url.pathname.startsWith("/api/")) {
+      await routeApi(req, res, url.pathname, url);
+      return;
+    }
+    serveStatic(req, res, url.pathname);
+  } catch (error) {
+    console.error("CRITICAL SERVER ERROR:", error);
+    if (!res.writableEnded) {
+      res.writeHead(500, { "Content-Type": "text/plain" });
+      res.end(`Internal Server Error: ${error.message}`);
+    }
   }
-  serveStatic(req, res, url.pathname);
 }
 
 // Vercel serverless function export
