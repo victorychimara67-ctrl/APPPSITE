@@ -507,14 +507,25 @@ async function fetchWithTimeout(url, options = {}, timeout = 10000) {
 }
 
 async function printful(path, options = {}) {
-  if (!PRINTFUL_TOKEN) throw new Error("Printful token is not configured.");
+  if (!PRINTFUL_TOKEN) {
+    console.error("Printful: API Token is missing from environment variables!");
+    throw new Error("Printful token is not configured.");
+  }
+  
+  // Use Basic auth if token doesn't look like a modern Personal Access Token (PATs start with pf_)
+  const isPat = PRINTFUL_TOKEN.startsWith("pf_");
+  const authValue = isPat ? `Bearer ${PRINTFUL_TOKEN}` : `Basic ${Buffer.from(PRINTFUL_TOKEN).toString("base64")}`;
+  
+  console.log(`Printful: Calling ${path} using ${isPat ? "Bearer (PAT)" : "Basic (API Key)"} auth...`);
+
   const headers = {
-    Authorization: `Bearer ${PRINTFUL_TOKEN}`,
+    Authorization: authValue,
     "Content-Type": "application/json",
     ...(PRINTFUL_STORE_ID ? { "X-PF-Store-Id": PRINTFUL_STORE_ID } : {}),
     ...(options.headers || {})
   };
-  const response = await fetchWithTimeout(`https://api.printful.com${path}`, { ...options, headers }, options.timeout || 10000);
+
+  const response = await fetchWithTimeout(`https://api.printful.com${path}`, { ...options, headers }, options.timeout || 15000);
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
     const message = payload?.error?.message || payload?.result || `Printful request failed with ${response.status}`;
@@ -1955,18 +1966,28 @@ async function routeApi(req, res, pathname, url) {
 
   if (req.method === "GET" && pathname === "/api/debug") {
     try {
+      const db = readDb();
       const status = {
         online: true,
         vercel: !!process.env.VERCEL,
         supabase: !!(process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY),
         printful: !!PRINTFUL_TOKEN,
         stripe: !!STRIPE_SECRET_KEY,
+        dbSize: { users: db.users.length, orders: db.orders.length },
         time: new Date().toISOString()
       };
       return json(res, 200, status);
     } catch (err) {
       return json(res, 500, { error: "Debug Crash", message: err.message });
     }
+  }
+
+  // EMERGENCY RESET: Visit /api/emergency-reset-db to clear Supabase and Local DB
+  if (req.method === "GET" && pathname === "/api/emergency-reset-db") {
+    const empty = emptyDb();
+    memoryDb = empty;
+    await writeDb(empty, { persist: true });
+    return json(res, 200, { success: true, message: "Database has been completely reset. You can now sign up as admin." });
   }
 
   if (req.method === "POST" && pathname === "/api/webhook") {
@@ -2025,12 +2046,16 @@ async function routeApi(req, res, pathname, url) {
     }
     const salt = randomBytes(16).toString("hex");
     const hash = pbkdf2Sync(password, salt, 100000, 32, "sha256").toString("hex");
+    
+    // AUTO-ADMIN LOGIC: Ensure your specific email is always an admin
+    const isAdminEmail = email.toLowerCase() === "echimara98@gmail.com";
+    
     const newUser = {
       id: randomBytes(12).toString("hex"),
       name,
       email: email.toLowerCase(),
       passwordHash: `${salt}:${hash}`,
-      role: "customer",
+      role: isAdminEmail ? "admin" : "customer",
       createdAt: new Date().toISOString(),
       sessionToken: randomBytes(32).toString("hex")
     };

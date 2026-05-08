@@ -1,29 +1,9 @@
 {
-  "users": [
-    {
-      "id": "ca912926c38ed3af701694b5",
-      "name": "Ikechukwu",
-      "email": "echimara98@gmail.com",
-      "passwordHash": "da024a52dd2ef2d0466c8989efe6d4bb:edafbbc3181b0fb508a9f95e626e2d876dfb01d242621e1d887caba5fcf0e038",
-      "createdAt": "2026-05-02T16:42:32.873Z",
-      "role": "admin"
-    }
-  ],
+  "users": [],
   "sessions": [],
   "orders": [],
   "hiddenProducts": [],
-  "discountCodes": [
-    {
-      "code": "ECI-UC92-SSEA",
-      "type": "fixed",
-      "value": 20,
-      "active": true,
-      "isGiftCard": true,
-      "recipientEmail": "",
-      "message": "",
-      "createdAt": "2026-05-02T19:04:10.112Z"
-    }
-  ],
+  "discountCodes": [],
   "productOverrides": {},
   "messages": [],
   "popupConfig": {
