@@ -335,7 +335,7 @@ function requireAdmin(req, res) {
 }
 
 function hashPassword(password, salt = randomBytes(16).toString("hex")) {
-  const hash = pbkdf2Sync(password, salt, 120000, 32, "sha256").toString("hex");
+  const hash = pbkdf2Sync(password, salt, 100000, 32, "sha256").toString("hex");
   return `${salt}:${hash}`;
 }
 
@@ -542,11 +542,22 @@ async function getProducts() {
     }
 
     console.log(`Printful: Starting sync for Store ID: ${storeId || "UNKNOWN"}...`);
-    const payload = await printful("/store/products?limit=100", { 
-      timeout: 15000,
-      headers: storeId ? { "X-PF-Store-Id": storeId } : {}
-    });
-    const summaries = payload.result || [];
+    let summaries = [];
+    try {
+      const payload = await printful("/sync/products?limit=100", { 
+        timeout: 10000,
+        headers: storeId ? { "X-PF-Store-Id": storeId } : {}
+      });
+      summaries = payload.result || [];
+    } catch (e) {
+      console.warn("Printful: /sync/products failed, trying /store/products...");
+      const payload = await printful("/store/products?limit=100", { 
+        timeout: 10000,
+        headers: storeId ? { "X-PF-Store-Id": storeId } : {}
+      });
+      summaries = payload.result || [];
+    }
+
     console.log(`Printful: Found ${summaries.length} products. Fetching details...`);
     
     if (summaries.length === 0) {
@@ -1921,22 +1932,19 @@ async function routeApi(req, res, pathname, url) {
   }
 
   if (req.method === "GET" && pathname === "/api/debug") {
-    return json(res, 200, {
-      env: {
-        PRINTFUL_TOKEN: !!PRINTFUL_TOKEN,
-        PRINTFUL_STORE_ID: PRINTFUL_STORE_ID || "MISSING (Will try auto-fetch)",
-        STRIPE_SECRET_KEY: !!STRIPE_SECRET_KEY,
-        SUPABASE_URL: !!process.env.SUPABASE_URL,
-        SUPABASE_KEY: !!process.env.SUPABASE_ANON_KEY,
-        SITE_URL: SITE_URL || "MISSING (Using request origin)",
-        VERCEL: !!process.env.VERCEL
-      },
-      db: {
-        users: db.users.length,
-        orders: db.orders.length,
-        usingSupabase: !!(process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY)
-      }
-    });
+    try {
+      const status = {
+        online: true,
+        vercel: !!process.env.VERCEL,
+        supabase: !!(process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY),
+        printful: !!PRINTFUL_TOKEN,
+        stripe: !!STRIPE_SECRET_KEY,
+        time: new Date().toISOString()
+      };
+      return json(res, 200, status);
+    } catch (err) {
+      return json(res, 500, { error: "Debug Crash", message: err.message });
+    }
   }
 
   if (req.method === "POST" && pathname === "/api/webhook") {
@@ -2081,67 +2089,32 @@ async function routeApi(req, res, pathname, url) {
   return json(res, 404, { error: "API route not found" });
 }
 
-function json(res, status, data) {
-  res.writeHead(status, { "Content-Type": "application/json" });
-  res.end(JSON.stringify(data));
-}
 
+// --- UTILITIES MOVED/CONSOLIDATED ---
 function sanitizeUser(user) {
-  const { password, sessionToken, ...rest } = user;
+  if (!user) return null;
+  const { password, passwordHash, sessionToken, ...rest } = user;
   return rest;
-}
-
-function verifyPassword(plain, hashed) {
-  if (!hashed) return false;
-  try {
-    const [salt, key] = hashed.split(":");
-    // Try SHA-256 first (older/standard format)
-    const derived256 = pbkdf2Sync(plain, salt, 100000, 32, "sha256").toString("hex");
-    if (timingSafeEqual(Buffer.from(derived256, "hex"), Buffer.from(key, "hex"))) return true;
-    
-    // Fallback to SHA-512
-    const derived512 = pbkdf2Sync(plain, salt, 100000, 64, "sha512").toString("hex");
-    return timingSafeEqual(Buffer.from(derived512, "hex"), Buffer.from(key, "hex"));
-  } catch (e) { return false; }
-}
-
-async function parseBody(req) {
-  return new Promise((resolve) => {
-    let body = "";
-    req.on("data", chunk => body += chunk);
-    req.on("end", () => {
-      try { resolve(JSON.parse(body)); }
-      catch { resolve({}); }
-    });
-  });
-}
-
-function getCookie(req, name) {
-  const list = {};
-  const rc = req.headers.cookie;
-  if (rc) rc.split(";").forEach(cookie => {
-    const parts = cookie.split("=");
-    list[parts.shift().trim()] = decodeURI(parts.join("="));
-  });
-  return list[name];
 }
 
 async function handleRequest(req, res) {
   try {
-    await ensureDb();
     const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
     const pathname = url.pathname;
     
+    // Lazy DB initialization to prevent blocking
+    ensureDb().catch(e => console.error("LAZY DB ERROR:", e.message));
+
     if (pathname.startsWith("/api/")) {
       await routeApi(req, res, pathname, url);
       return;
     }
     serveStatic(req, res, pathname);
   } catch (error) {
-    console.error("CRITICAL SERVER ERROR:", error);
+    console.error("GLOBAL SERVER ERROR:", error);
     if (!res.writableEnded) {
-      res.writeHead(500, { "Content-Type": "text/plain" });
-      res.end(`Internal Server Error: ${error.message}`);
+      res.writeHead(500, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Internal Server Error", message: error.message }));
     }
   }
 }
