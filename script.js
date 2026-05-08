@@ -54,6 +54,20 @@ const printGiftMessage = document.getElementById("printGiftMessage");
 let cart = loadCart();
 let currentUser = null;
 let currentProduct = null;
+const liteMotion = shouldUseLiteMotion();
+if (liteMotion) document.documentElement.classList.add("network-lite");
+
+let productsPromise = null;
+function getProductsData() {
+  if (!productsPromise) {
+    productsPromise = api("/api/products").catch(err => {
+      console.warn("Global products fetch failed", err);
+      productsPromise = null; // Allow retry
+      throw err;
+    });
+  }
+  return productsPromise;
+}
 
 function saveCart() {
   localStorage.setItem("eci_cart", JSON.stringify(cart));
@@ -191,6 +205,7 @@ function normalizeCheckoutCountry(value) {
 }
 
 function renderProducts(productList) {
+  if (!productGrid) return;
   if (!Array.isArray(productList)) {
     console.error("renderProducts: Expected array, got", typeof productList);
     productList = [];
@@ -248,9 +263,9 @@ function renderVariantSelect(product) {
 }
 
 async function loadProducts() {
-  const loader = productGrid.querySelector(".product-empty");
+  const loader = productGrid?.querySelector(".product-empty");
   try {
-    const payload = await api("/api/products");
+    const payload = await getProductsData();
     allProducts = payload.products || [];
     renderProducts(allProducts);
     
@@ -1472,9 +1487,6 @@ function setupParticles() {
   window.addEventListener("resize", resizeCanvas, { passive: true });
 }
 
-const liteMotion = shouldUseLiteMotion();
-if (liteMotion) document.documentElement.classList.add("network-lite");
-
 setNavState();
 persistCart();
 handlePaymentReturn();
@@ -1488,7 +1500,7 @@ function startAdminPolling() {
 // Dynamic Pop-up Logic
 async function initPopup() {
   try {
-    const payload = await api("/api/products"); // Get general info which includes config fallback? No, let's use auth/me or a new endpoint.
+    const payload = await getProductsData();
     // Actually, let's just fetch admin overview if admin, but for normal users we need the config.
     // I'll add the config to the /api/products response in server.js.
     const config = payload.popupConfig;

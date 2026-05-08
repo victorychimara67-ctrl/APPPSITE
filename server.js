@@ -487,7 +487,8 @@ async function getProducts() {
     return { source: "local", products: applyProductOverrides(localProducts, db).filter((p) => !hidden.has(p.id)) };
   }
 
-  if (productCache.products && productCache.expiresAt > Date.now()) {
+  // Rapid cache check
+  if (productCache.products && productCache.products.length > 0 && productCache.expiresAt > Date.now()) {
     return {
       source: productCache.source || "printful",
       connected: productCache.connected,
@@ -496,20 +497,32 @@ async function getProducts() {
     };
   }
 
+  // If we have any cached products (even expired), return them immediately if we are in a high-concurrency state
+  // This prevents multiple parallel requests from hitting Printful at once
+  if (productCache.syncing) {
+    return {
+      source: productCache.source || "printful",
+      connected: productCache.connected,
+      products: applyProductOverrides(productCache.products || localProducts, db).filter((p) => !hidden.has(p.id)),
+      warning: "Sync in progress..."
+    };
+  }
+
   try {
+    productCache.syncing = true;
     console.log("Printful: Syncing products...");
-    const payload = await printful("/store/products?limit=100");
+    const payload = await printful("/store/products?limit=100", { timeout: 12000 });
     const summaries = (payload.result || []);
     
     if (summaries.length === 0) {
       console.warn("Printful: No products found in store.");
     }
 
-    // Process products in parallel with a timeout for each to ensure speed
+    // Process products in parallel with a strict timeout for each
     const detailed = await Promise.all(
-      summaries.map(async (item) => {
+      summaries.slice(0, 40).map(async (item) => { // Limit to 40 for stability
         try {
-          const detail = await printful(`/store/products/${item.id}`, { timeout: 8000 });
+          const detail = await printful(`/store/products/${item.id}`, { timeout: 6000 });
           return mapPrintfulProduct(item, detail.result);
         } catch (err) {
           console.warn(`Printful: Failed to load detail for ${item.name || item.id}: ${err.message}`);
@@ -520,33 +533,29 @@ async function getProducts() {
 
     const products = detailed.filter(Boolean);
     if (products.length === 0 && summaries.length > 0) {
-      console.warn("Printful: All product details failed to load, using summaries.");
-      // Fallback to minimal data if details fail
       summaries.forEach(s => products.push(mapPrintfulProduct(s, null)));
     }
+
     productCache = {
-      expiresAt: Date.now() + 1000 * 60 * 10, // Cache for 10 minutes
+      expiresAt: Date.now() + 1000 * 60 * 15, // 15 min cache
       products,
       source: "printful",
       connected: true,
-      warning: ""
+      warning: "",
+      syncing: false
     };
     console.log(`Printful: Synced ${products.length} products.`);
     return { source: "printful", connected: true, products: applyProductOverrides(productCache.products, db).filter((p) => !hidden.has(p.id)) };
   } catch (error) {
     console.warn(`Printful: API Sync failed: ${error.message}`);
-    productCache = {
-      expiresAt: Date.now() + 1000 * 60 * 2, // Try again in 2 minutes
-      products: applyProductOverrides(localProducts, db).filter((p) => !hidden.has(p.id)),
-      source: "local_fallback",
-      connected: false,
-      warning: `Printful unavailable: ${error.message}`
-    };
+    productCache.syncing = false;
+    // Fallback to what we have or local
+    const fallbackProducts = productCache.products || localProducts;
     return {
-      source: productCache.source,
-      connected: productCache.connected,
-      warning: productCache.warning,
-      products: productCache.products
+      source: "fallback",
+      connected: false,
+      warning: `Printful unavailable: ${error.message}`,
+      products: applyProductOverrides(fallbackProducts, db).filter((p) => !hidden.has(p.id))
     };
   }
 }
@@ -712,7 +721,7 @@ function normalizeProductOverride(body = {}, existing = {}) {
   };
 }
 
-async function routeApi(req, res, pathname) {
+async function routeApi(req, res, pathname, url) {
   try {
     if (req.method === "GET" && pathname === "/api/health") {
       return json(res, 200, {
@@ -1883,7 +1892,7 @@ async function handleRequest(req, res) {
   }
 
   if (url.pathname.startsWith("/api/")) {
-    await routeApi(req, res, url.pathname);
+    await routeApi(req, res, url.pathname, url);
     return;
   }
   serveStatic(req, res, url.pathname);
