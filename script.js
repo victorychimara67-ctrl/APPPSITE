@@ -167,15 +167,24 @@ function updateAuthUi() {
   if (!accountPanel || !adminButton) return;
   const isAdmin = currentUser && currentUser.role === "admin";
   adminButton.classList.toggle("hidden", !isAdmin);
+  
   if (currentUser) {
     loginForm?.classList.add("hidden");
     signupForm?.classList.add("hidden");
+    document.querySelector(".auth-tabs")?.classList.add("hidden");
     accountPanel.classList.remove("hidden");
-    accountName.innerHTML = `Signed in as <strong>${currentUser.name}</strong>`;
+    accountName.innerHTML = `Signed in as <strong>${escapeHtml(currentUser.name)}</strong>`;
     profileButton?.classList.add("logged-in");
+    
+    // Auto-fill checkout
+    if (checkoutForm) {
+      checkoutForm.email.value = currentUser.email || "";
+      checkoutForm.name.value = currentUser.name || "";
+    }
   } else {
     accountPanel.classList.add("hidden");
     loginForm?.classList.remove("hidden");
+    document.querySelector(".auth-tabs")?.classList.remove("hidden");
     profileButton?.classList.remove("logged-in");
   }
 }
@@ -244,6 +253,42 @@ async function loadProducts() {
   }
 }
 
+// --- Product Detail Sub-logic ---
+let detailGalleryIndex = 0;
+let detailGalleryImages = [];
+
+function setDetailImage(index) {
+  if (!detailGalleryImages.length || !detailMainImage) return;
+  detailGalleryIndex = (index + detailGalleryImages.length) % detailGalleryImages.length;
+  detailMainImage.src = detailGalleryImages[detailGalleryIndex];
+  
+  // Highlight active thumbnail if it exists
+  mockupStrip?.querySelectorAll("button").forEach((btn, i) => {
+    btn.classList.toggle("active", i === detailGalleryIndex);
+  });
+}
+
+galleryPrev?.addEventListener("click", () => setDetailImage(detailGalleryIndex - 1));
+galleryNext?.addEventListener("click", () => setDetailImage(detailGalleryIndex + 1));
+
+detailAddButton?.addEventListener("click", () => {
+  if (currentProduct) {
+    addToCart(currentProduct.id, detailVariant?.value);
+    closeModal(productModal);
+  }
+});
+
+const detailBuyButton = document.getElementById("detailBuyButton");
+detailBuyButton?.addEventListener("click", () => {
+  if (currentProduct) {
+    addToCart(currentProduct.id, detailVariant?.value);
+    renderCart();
+    openModal(cartModal);
+    closeModal(productModal);
+  }
+});
+
+// Update openProductDetail to handle gallery
 async function openProductDetail(id) {
   const product = allProducts.find(p => p.id === id) || products[id];
   if (!product) return;
@@ -252,8 +297,19 @@ async function openProductDetail(id) {
   if (detailTitle) detailTitle.textContent = product.name;
   if (detailPrice) detailPrice.textContent = money(product.price, product.currency);
   if (detailDescription) detailDescription.textContent = product.description || "Premium ECI silhouette.";
-  if (detailMainImage) detailMainImage.src = product.image;
   
+  detailGalleryImages = product.images || [product.image];
+  detailGalleryIndex = 0;
+  if (detailMainImage) detailMainImage.src = detailGalleryImages[0];
+  
+  if (mockupStrip) {
+    mockupStrip.innerHTML = detailGalleryImages.map((img, i) => `
+      <button class="${i === 0 ? 'active' : ''}" onclick="setDetailImage(${i})">
+        <img src="${escapeHtml(img)}" />
+      </button>
+    `).join("");
+  }
+
   if (detailVariant) {
     detailVariant.innerHTML = (product.variants || [])
       .map(v => `<option value="${v.id}">${escapeHtml(v.name.replace(product.name + " / ", ""))}</option>`)
@@ -263,6 +319,8 @@ async function openProductDetail(id) {
   
   openModal(productModal);
 }
+
+window.setDetailImage = setDetailImage;
 
 function addToCart(id, variantId = "") {
   const product = allProducts.find(p => p.id === id) || products[id];
