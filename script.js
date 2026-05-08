@@ -278,6 +278,10 @@ detailAddButton?.addEventListener("click", () => {
   }
 });
 
+detailSpinButton?.addEventListener("click", () => {
+  if (detailViewer) detailViewer.classList.toggle("spinning");
+});
+
 const detailBuyButton = document.getElementById("detailBuyButton");
 detailBuyButton?.addEventListener("click", () => {
   if (currentProduct) {

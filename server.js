@@ -1883,35 +1883,161 @@ async function ensureDb() {
   return dbInitializationPromise;
 }
 
+async function routeApi(req, res, pathname, url) {
+  const db = readDb();
+  
+  // Public Data
+  if (req.method === "GET" && pathname === "/api/products") {
+    const data = await getProducts();
+    return json(res, 200, data);
+  }
+
+  if (req.method === "GET" && pathname.startsWith("/api/products/")) {
+    const productId = decodeURIComponent(pathname.replace("/api/products/", ""));
+    const product = await getProduct(productId);
+    return product ? json(res, 200, { product }) : json(res, 404, { error: "Product not found" });
+  }
+
+  // Auth System
+  if (req.method === "GET" && pathname === "/api/auth/me") {
+    const sessionToken = getCookie(req, "session");
+    const user = db.users.find(u => u.sessionToken === sessionToken);
+    return user ? json(res, 200, { user: sanitizeUser(user) }) : json(res, 401, { error: "Not logged in" });
+  }
+
+  if (req.method === "POST" && pathname === "/api/auth/login") {
+    const { email, password } = await parseBody(req);
+    const user = db.users.find(u => u.email === String(email).toLowerCase());
+    if (!user || !verifyPassword(password, user.passwordHash || user.password)) {
+      return json(res, 401, { error: "Invalid email or password" });
+    }
+    const token = randomBytes(32).toString("hex");
+    user.sessionToken = token;
+    await writeDb(db);
+    res.setHeader("Set-Cookie", `session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000`);
+    return json(res, 200, { user: sanitizeUser(user) });
+  }
+
+  // CHECKOUT - THE BROKEN PART
+  if (req.method === "POST" && pathname === "/api/checkout") {
+    if (!STRIPE_SECRET_KEY) return json(res, 500, { error: "Stripe not configured" });
+    const body = await parseBody(req);
+    const { items, email, name, address1, city, country_code, state_code, zip } = body;
+    
+    if (!items?.length) return json(res, 400, { error: "Cart is empty" });
+    
+    const stripe = new Stripe(STRIPE_SECRET_KEY);
+    const orderId = `ECI-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    
+    const line_items = items.map(item => ({
+      price_data: {
+        currency: String(item.currency || "USD").toLowerCase(),
+        product_data: { name: item.name, images: [item.image].filter(Boolean) },
+        unit_amount: Math.round(item.price * 100),
+      },
+      quantity: item.quantity,
+    }));
+
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ["card"],
+      line_items,
+      mode: "payment",
+      success_url: `${SITE_URL}/?success=true&order_id=${orderId}`,
+      cancel_url: `${SITE_URL}/?canceled=true`,
+      customer_email: email,
+      client_reference_id: orderId,
+      metadata: { orderId, name, email, address1, city, country_code, state_code, zip }
+    });
+
+    // Save as pending order
+    db.orders.push({
+      id: orderId,
+      status: "pending_payment",
+      items,
+      total: items.reduce((s, i) => s + (i.price * i.quantity), 0),
+      currency: items[0]?.currency || "USD",
+      recipient: { name, email, address1, city, country_code, state_code, zip },
+      createdAt: new Date().toISOString()
+    });
+    await writeDb(db);
+
+    return json(res, 200, { url: session.url });
+  }
+
+  // Admin Routes
+  if (pathname.startsWith("/api/admin/")) {
+    const sessionToken = getCookie(req, "session");
+    const user = db.users.find(u => u.sessionToken === sessionToken);
+    if (!user || user.role !== "admin") return json(res, 403, { error: "Admin access required" });
+    
+    if (pathname === "/api/admin/stats") {
+      return json(res, 200, {
+        totalOrders: db.orders.length,
+        totalRevenue: db.orders.filter(o => o.status === "paid" || o.status === "shipped").reduce((s, o) => s + o.total, 0),
+        totalUsers: db.users.length
+      });
+    }
+  }
+
+  return json(res, 404, { error: "API route not found" });
+}
+
+function json(res, status, data) {
+  res.writeHead(status, { "Content-Type": "application/json" });
+  res.end(JSON.stringify(data));
+}
+
+function sanitizeUser(user) {
+  const { password, sessionToken, ...rest } = user;
+  return rest;
+}
+
+function verifyPassword(plain, hashed) {
+  if (!hashed) return false;
+  try {
+    const [salt, key] = hashed.split(":");
+    // Try SHA-256 first (older/standard format)
+    const derived256 = pbkdf2Sync(plain, salt, 100000, 32, "sha256").toString("hex");
+    if (timingSafeEqual(Buffer.from(derived256, "hex"), Buffer.from(key, "hex"))) return true;
+    
+    // Fallback to SHA-512
+    const derived512 = pbkdf2Sync(plain, salt, 100000, 64, "sha512").toString("hex");
+    return timingSafeEqual(Buffer.from(derived512, "hex"), Buffer.from(key, "hex"));
+  } catch (e) { return false; }
+}
+
+async function parseBody(req) {
+  return new Promise((resolve) => {
+    let body = "";
+    req.on("data", chunk => body += chunk);
+    req.on("end", () => {
+      try { resolve(JSON.parse(body)); }
+      catch { resolve({}); }
+    });
+  });
+}
+
+function getCookie(req, name) {
+  const list = {};
+  const rc = req.headers.cookie;
+  if (rc) rc.split(";").forEach(cookie => {
+    const parts = cookie.split("=");
+    list[parts.shift().trim()] = decodeURI(parts.join("="));
+  });
+  return list[name];
+}
+
 async function handleRequest(req, res) {
   try {
     await ensureDb();
     const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
+    const pathname = url.pathname;
     
-    // Basic Analytics
-    if (!url.pathname.startsWith("/api/") && !url.pathname.includes(".")) {
-      const db = readDb();
-      db.analytics.totalVisits++;
-      const ref = req.headers.referer || "Direct";
-      db.analytics.referrers[ref] = (db.analytics.referrers[ref] || 0) + 1;
-      if (db.analytics.totalVisits % 5 === 0) writeDb(db); // Async write
-    }
-
-    const sessionToken = getCookie(req, "session") || req.socket.remoteAddress;
-    liveUsers.set(sessionToken, Date.now());
-    
-    // Heartbeat cleanup
-    if (Math.random() < 0.1) {
-      for (const [token, time] of liveUsers.entries()) {
-        if (Date.now() - time > 60000) liveUsers.delete(token);
-      }
-    }
-
-    if (url.pathname.startsWith("/api/")) {
-      await routeApi(req, res, url.pathname, url);
+    if (pathname.startsWith("/api/")) {
+      await routeApi(req, res, pathname, url);
       return;
     }
-    serveStatic(req, res, url.pathname);
+    serveStatic(req, res, pathname);
   } catch (error) {
     console.error("CRITICAL SERVER ERROR:", error);
     if (!res.writableEnded) {
