@@ -134,7 +134,7 @@ function persistCart() {
 // --- Core API & Auth ---
 async function api(path, options = {}) {
   const controller = new AbortController();
-  const id = setTimeout(() => controller.abort(), 25000);
+  const id = setTimeout(() => controller.abort(), 60000); // 60s timeout for long syncs
   try {
     const response = await fetch(path, {
       headers: { "Content-Type": "application/json", ...(options.headers || {}) },
@@ -190,22 +190,24 @@ function updateAuthUi() {
 }
 
 // --- Product Logic ---
-function renderProducts(productList) {
-  console.log("renderProducts: Rendering", productList.length, "items");
+function renderProducts(data) {
   if (!productGrid) return;
+  const products = data.products || [];
+  allProducts = products;
   
-  allProducts = productList;
-  const indexed = {};
-  productList.forEach(p => { if (p && p.id) indexed[p.id] = p; });
-  Object.assign(products, indexed);
-
-  if (!productList.length) {
-    productGrid.innerHTML = '<div class="product-empty">No ECI products found.</div>';
+  if (products.length === 0) {
+    productGrid.innerHTML = `
+      <div class="empty-state">
+        <h3>No products found</h3>
+        <p>Your Printful store appears to be empty or the sync is still in progress.</p>
+        <button class="button ghost" onclick="loadProducts()">Try Again</button>
+      </div>
+    `;
     return;
   }
 
   try {
-    productGrid.innerHTML = productList
+    productGrid.innerHTML = products
       .map((product) => `
         <article class="product-card reveal" onclick="openProductDetail('${product.id}')" role="button" aria-label="View ${escapeHtml(product.name)}">
           <img src="${escapeHtml(product.image)}" alt="${escapeHtml(productAlt(product.name))}" loading="lazy" decoding="async" />

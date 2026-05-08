@@ -196,16 +196,19 @@ async function writeDb(db, options = {}) {
       if (res.status === 204 || res.status === 200) {
         console.log("Supabase Success: Cloud state updated.");
       } else {
-        console.warn(`Supabase PATCH failed (${res.status}), trying POST/Insert...`);
-        await fetch(`${supabaseUrl}/rest/v1/storage`, {
+        const errText = await res.text().catch(() => "Unknown error");
+        console.warn(`Supabase PATCH failed (${res.status}): ${errText}, trying POST/Insert...`);
+        const postRes = await fetch(`${supabaseUrl}/rest/v1/storage`, {
           method: "POST",
           headers: { 
             "apikey": supabaseKey, 
             "Authorization": `Bearer ${supabaseKey}`,
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
+            "Prefer": "return=minimal"
           },
-          body: JSON.stringify({ id: "main", data: memoryDb })
+          body: JSON.stringify({ id: "main", data: memoryDb, updated_at: new Date().toISOString() })
         });
+        console.log(`Supabase POST status ${postRes.status}`);
       }
     } catch (e) {
       console.warn("Supabase save failed:", e.message);
@@ -527,10 +530,15 @@ async function getProducts() {
 
   try {
     productCache.syncing = true;
-    console.log(`Printful: Syncing (Vercel=${!!process.env.VERCEL})...`);
+    console.log(`Printful: Starting sync for Store ID: ${PRINTFUL_STORE_ID}...`);
     
-    const payload = await printful("/store/products?limit=50", { timeout: 10000 });
+    const payload = await printful("/store/products?limit=100", { timeout: 15000 });
     const summaries = payload.result || [];
+    console.log(`Printful: Found ${summaries.length} products. Fetching details...`);
+    
+    if (summaries.length === 0) {
+      console.warn("Printful: No products found in store. Is the store ID correct?");
+    }
     
     const products = [];
     const chunkSize = process.env.VERCEL ? 3 : 8;
@@ -548,6 +556,7 @@ async function getProducts() {
           const detail = await printful(`/store/products/${item.id}`, { timeout: 6000 });
           return mapPrintfulProduct(item, detail.result);
         } catch (e) {
+          console.warn(`Printful: Failed to fetch details for product ${item.id}:`, e.message);
           return mapPrintfulProduct(item, null); // Fallback to summary data
         }
       }));
@@ -559,14 +568,20 @@ async function getProducts() {
       expiresAt: Date.now() + 1000 * 60 * 15,
       products,
       source: "printful",
-      connected: true,
+      connected: products.length > 0,
       syncing: false
     };
     return { source: "printful", products: applyProductOverrides(products, db).filter((p) => !hidden.has(p.id)) };
   } catch (error) {
-    console.error("Printful Sync Error:", error.message);
+    console.error("PRINTFUL CRITICAL SYNC ERROR:", {
+      message: error.message,
+      token: PRINTFUL_TOKEN ? "Present (Starts with " + PRINTFUL_TOKEN.slice(0, 4) + ")" : "MISSING",
+      storeId: PRINTFUL_STORE_ID
+    });
     productCache.syncing = false;
-    const fallback = productCache.products || localProducts;
+    
+    // ONLY fallback if no cache at all
+    const fallback = productCache.products || []; 
     return {
       source: "error_fallback",
       warning: error.message,
@@ -596,13 +611,13 @@ function mapPrintfulProduct(summary, detail) {
   return {
     id: `printful-${summary.id}`,
     name: summary.name || firstVariant?.name || "Printful Product",
-    price: Number.isFinite(price) && price > 0 ? price : null,
+    price: Number.isFinite(price) && price > 0 ? price : 0,
     currency: currency,
-    image: summary.thumbnail_url || firstVariant?.thumbnail_url || "assets/reference-showroom.png",
+    image: previewImages[0] || summary.thumbnail_url || "assets/logo.png",
     printfulProductId: summary.id,
     printfulVariantId: firstVariant?.id ? String(firstVariant.id) : "",
     synced: summary.synced,
-    description: detail?.sync_product?.description || "",
+    description: summary.name + " - High-quality custom apparel from ECI Universe.",
     images: previewImages.length ? previewImages : [summary.thumbnail_url || firstVariant?.thumbnail_url || "assets/reference-showroom.png"],
     variants: variants.map((variant) => ({
       id: String(variant.id),
@@ -736,7 +751,8 @@ function normalizeProductOverride(body = {}, existing = {}) {
   };
 }
 
-async function routeApi(req, res, pathname, url) {
+// Consolidating API routes...
+async function _old_routeApi(req, res, pathname, url) {
   try {
     if (req.method === "GET" && pathname === "/api/health") {
       return json(res, 200, {
@@ -1886,6 +1902,27 @@ async function ensureDb() {
 async function routeApi(req, res, pathname, url) {
   const db = readDb();
   
+  // Health & Diagnostics
+  if (req.method === "GET" && pathname === "/api/health") {
+    return json(res, 200, { ok: true, version: "2.0.0", connected: !!PRINTFUL_TOKEN });
+  }
+
+  if (req.method === "POST" && pathname === "/api/webhook") {
+    const chunks = [];
+    for await (const chunk of req) chunks.push(chunk);
+    const rawBody = Buffer.concat(chunks).toString();
+    const signature = req.headers["stripe-signature"];
+    try {
+      await verifyStripeWebhook(rawBody, signature);
+      const event = JSON.parse(rawBody);
+      await handleStripeEvent(event);
+      return json(res, 200, { received: true });
+    } catch (err) {
+      console.error("WEBHOOK ERROR:", err.message);
+      return json(res, 400, { error: err.message });
+    }
+  }
+
   // Public Data
   if (req.method === "GET" && pathname === "/api/products") {
     const data = await getProducts();
@@ -1916,6 +1953,29 @@ async function routeApi(req, res, pathname, url) {
     await writeDb(db);
     res.setHeader("Set-Cookie", `session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000`);
     return json(res, 200, { user: sanitizeUser(user) });
+  }
+
+  if (req.method === "POST" && pathname === "/api/auth/signup") {
+    const { name, email, password } = await parseBody(req);
+    if (!name || !email || !password) return json(res, 400, { error: "Missing required fields" });
+    if (db.users.find(u => u.email === email.toLowerCase())) {
+      return json(res, 400, { error: "Account already exists" });
+    }
+    const salt = randomBytes(16).toString("hex");
+    const hash = pbkdf2Sync(password, salt, 100000, 32, "sha256").toString("hex");
+    const newUser = {
+      id: randomBytes(12).toString("hex"),
+      name,
+      email: email.toLowerCase(),
+      passwordHash: `${salt}:${hash}`,
+      role: "customer",
+      createdAt: new Date().toISOString(),
+      sessionToken: randomBytes(32).toString("hex")
+    };
+    db.users.push(newUser);
+    await writeDb(db);
+    res.setHeader("Set-Cookie", `session=${newUser.sessionToken}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000`);
+    return json(res, 200, { user: sanitizeUser(newUser) });
   }
 
   // CHECKOUT - THE BROKEN PART
@@ -1976,6 +2036,13 @@ async function routeApi(req, res, pathname, url) {
         totalRevenue: db.orders.filter(o => o.status === "paid" || o.status === "shipped").reduce((s, o) => s + o.total, 0),
         totalUsers: db.users.length
       });
+    }
+
+    if (req.method === "POST" && pathname === "/api/admin/sync-printful") {
+      console.log("Admin: Manual Printful sync triggered.");
+      productCache = { expiresAt: 0, products: null, source: "", connected: false, syncing: false };
+      const data = await getProducts();
+      return json(res, 200, { success: true, count: data.products?.length || 0 });
     }
   }
 
@@ -2056,5 +2123,15 @@ if (!process.env.VERCEL) {
     console.log(`Emmanuel CI Universe running at http://localhost:${PORT}`);
     console.log(`Stripe integration: ${STRIPE_SECRET_KEY ? "configured" : "waiting for STRIPE_SECRET_KEY"}`);
     console.log(`Printful integration: ${PRINTFUL_TOKEN ? "configured" : "waiting for PRINTFUL_TOKEN"}`);
+    
+    // Trigger initial sync
+    if (PRINTFUL_TOKEN) {
+      console.log("Startup: Triggering Printful background sync...");
+      getProducts().then(data => {
+        console.log(`Startup Sync Complete: Found ${data.products?.length || 0} products.`);
+      }).catch(err => {
+        console.error("Startup Sync Failed:", err.message);
+      });
+    }
   });
 }
